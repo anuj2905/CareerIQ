@@ -1,0 +1,7 @@
+PyTorch
+
+PyTorch is a deep learning framework commonly used to build and train neural networks.
+
+Important PyTorch concepts include tensors, datasets, data loaders, neural network modules, loss functions, optimizers, training loops, validation, GPU usage, and model saving.
+
+For a Machine Learning or AI Engineer, learning PyTorch can help with deep learning, computer vision, natural language processing, and generative AI projects.

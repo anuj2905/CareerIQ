@@ -1,0 +1,11 @@
+Machine Learning Engineer
+
+A Machine Learning Engineer develops, trains, evaluates, deploys, and maintains machine learning models.
+
+Important technical skills include Python, NumPy, Pandas, Scikit-learn, SQL, machine learning, deep learning, PyTorch or TensorFlow, Docker, APIs, Git, and MLOps.
+
+Machine Learning Engineers should understand supervised learning, unsupervised learning, feature engineering, model evaluation, hyperparameter tuning, model deployment, and monitoring.
+
+Useful projects include recommendation systems, fraud detection systems, prediction systems, NLP applications, computer vision applications, and end-to-end ML deployment projects.
+
+For entry-level positions, strong Python and machine learning fundamentals combined with practical projects are important.

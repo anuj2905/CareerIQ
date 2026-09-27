@@ -1,0 +1,7 @@
+Docker
+
+Docker is a containerization technology used to package applications and their dependencies into portable containers.
+
+For Machine Learning Engineers, Docker can be used to package machine learning APIs, model-serving applications, development environments, and deployment pipelines.
+
+Important concepts include images, containers, Dockerfiles, volumes, ports, registries, and Docker Compose.

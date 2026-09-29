@@ -100,3 +100,5 @@ tqdm
 # Supabase
 
 psycopg2-binary
+
+PyMuPDF

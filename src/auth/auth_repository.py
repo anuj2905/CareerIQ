@@ -1,129 +1,8 @@
 import hashlib
 import hmac
 import secrets
-import sqlite3
-from pathlib import Path
 
-
-# ============================================================
-# DATABASE LOCATION
-# ============================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "careeriq.db"
-)
-
-
-# ============================================================
-# DATABASE CONNECTION
-# ============================================================
-
-def get_auth_connection():
-    DATABASE_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    connection = sqlite3.connect(
-        DATABASE_PATH
-    )
-
-    connection.row_factory = sqlite3.Row
-
-    # Enable foreign key support
-    connection.execute(
-        "PRAGMA foreign_keys = ON"
-    )
-
-    return connection
-
-
-# ============================================================
-# INITIALIZE AUTH TABLES
-# ============================================================
-
-def initialize_auth_database():
-
-    connection = get_auth_connection()
-    cursor = connection.cursor()
-
-    # --------------------------------------------------------
-    # USERS
-    # --------------------------------------------------------
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL
-                CHECK(role IN ('student', 'company')),
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-
-    # --------------------------------------------------------
-    # COMPANY ACCOUNTS
-    #
-    # IMPORTANT:
-    # One company account can be connected to ONLY ONE company.
-    #
-    # Existing databases may still have the older
-    # UNIQUE(user_id, company_id) rule.
-    #
-    # Therefore the application also checks this rule before
-    # creating/linking a company.
-    # --------------------------------------------------------
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS company_accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            company_id INTEGER NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY(user_id)
-                REFERENCES users(id)
-                ON DELETE CASCADE,
-
-            FOREIGN KEY(company_id)
-                REFERENCES companies(id)
-                ON DELETE CASCADE,
-
-            UNIQUE(user_id, company_id)
-        )
-        """
-    )
-
-    # --------------------------------------------------------
-    # STUDENT ACCOUNTS
-    # --------------------------------------------------------
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS student_accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL UNIQUE,
-            student_id INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY(user_id)
-                REFERENCES users(id)
-                ON DELETE CASCADE
-        )
-        """
-    )
-
-    connection.commit()
-    connection.close()
+from src.database.database import get_connection
 
 
 # ============================================================
@@ -131,6 +10,11 @@ def initialize_auth_database():
 # ============================================================
 
 def hash_password(password: str) -> str:
+    """
+    Hash a password using PBKDF2-HMAC-SHA256.
+    Format:
+        salt_hex:hash_hex
+    """
 
     salt = secrets.token_bytes(16)
 
@@ -141,31 +25,22 @@ def hash_password(password: str) -> str:
         120_000
     )
 
-    return (
-        salt.hex()
-        + ":"
-        + password_hash.hex()
-    )
+    return salt.hex() + ":" + password_hash.hex()
 
 
 def verify_password(
     password: str,
     stored_hash: str
 ) -> bool:
+    """
+    Verify a password against the stored PBKDF2 hash.
+    """
 
     try:
+        salt_hex, hash_hex = stored_hash.split(":")
 
-        salt_hex, hash_hex = (
-            stored_hash.split(":")
-        )
-
-        salt = bytes.fromhex(
-            salt_hex
-        )
-
-        expected_hash = bytes.fromhex(
-            hash_hex
-        )
+        salt = bytes.fromhex(salt_hex)
+        expected_hash = bytes.fromhex(hash_hex)
 
         actual_hash = hashlib.pbkdf2_hmac(
             "sha256",
@@ -180,8 +55,70 @@ def verify_password(
         )
 
     except Exception:
-
         return False
+
+
+# ============================================================
+# DATABASE CONNECTION
+# ============================================================
+
+def get_auth_connection():
+    """
+    Use the same PostgreSQL connection used by the rest
+    of CareerIQ.
+
+    This replaces the old SQLite connection.
+    """
+
+    return get_connection()
+
+
+# ============================================================
+# INITIALIZE / VERIFY AUTH DATABASE
+# ============================================================
+
+def initialize_auth_database():
+    """
+    Verify that the authentication tables already exist
+    in Supabase PostgreSQL.
+
+    The tables are NOT created here because the schema
+    has already been created in Supabase.
+    """
+
+    connection = get_auth_connection()
+    cursor = connection.cursor()
+
+    try:
+        required_tables = [
+            "users",
+            "student_accounts",
+            "company_accounts"
+        ]
+
+        for table in required_tables:
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = %s
+                ) AS exists
+                """,
+                (table,)
+            )
+
+            result = cursor.fetchone()
+
+            if not result["exists"]:
+                raise RuntimeError(
+                    f"Required authentication table '{table}' "
+                    f"does not exist in Supabase."
+                )
+
+    finally:
+        connection.close()
 
 
 # ============================================================
@@ -193,27 +130,25 @@ def create_user(
     password: str,
     role: str
 ):
+    """
+    Create a new CareerIQ user.
+
+    Supported roles:
+        student
+        company
+    """
 
     email = email.strip().lower()
     role = role.strip().lower()
 
     if not email:
-        raise ValueError(
-            "Email is required."
-        )
+        raise ValueError("Email is required.")
 
     if not password:
-        raise ValueError(
-            "Password is required."
-        )
+        raise ValueError("Password is required.")
 
-    if role not in [
-        "student",
-        "company"
-    ]:
-        raise ValueError(
-            "Invalid account type."
-        )
+    if role not in ["student", "company"]:
+        raise ValueError("Invalid account type.")
 
     if len(password) < 8:
         raise ValueError(
@@ -224,10 +159,7 @@ def create_user(
     cursor = connection.cursor()
 
     try:
-
-        password_hash = hash_password(
-            password
-        )
+        password_hash = hash_password(password)
 
         cursor.execute(
             """
@@ -267,16 +199,26 @@ def create_user(
 
         return user_id
 
-    except sqlite3.IntegrityError:
+    except Exception as error:
 
         connection.rollback()
 
-        raise ValueError(
-            "An account with this email already exists."
-        )
+        # PostgreSQL unique constraint
+        # error handling
+        error_message = str(error).lower()
+
+        if (
+            "duplicate key" in error_message
+            or "unique constraint" in error_message
+            or "users_email_key" in error_message
+        ):
+            raise ValueError(
+                "An account with this email already exists."
+            )
+
+        raise
 
     finally:
-
         connection.close()
 
 
@@ -289,6 +231,18 @@ def authenticate_user(
     password: str,
     role: str
 ):
+    """
+    Authenticate a CareerIQ user.
+
+    Returns:
+        {
+            "id": ...,
+            "email": ...,
+            "role": ...
+        }
+
+    Returns None if authentication fails.
+    """
 
     email = email.strip().lower()
     role = role.strip().lower()
@@ -296,26 +250,29 @@ def authenticate_user(
     connection = get_auth_connection()
     cursor = connection.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            email,
-            password_hash,
-            role
-        FROM users
-        WHERE email = ?
-        AND role = ?
-        """,
-        (
-            email,
-            role
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                email,
+                password_hash,
+                role
+            FROM users
+            WHERE email = ?
+            AND role = ?
+            """,
+            (
+                email,
+                role
+            )
         )
-    )
 
-    user = cursor.fetchone()
+        user = cursor.fetchone()
 
-    connection.close()
+    finally:
+        connection.close()
 
     if user is None:
         return None
@@ -344,63 +301,71 @@ def user_has_company(
     connection = get_auth_connection()
     cursor = connection.cursor()
 
-    cursor.execute(
-        """
-        SELECT 1
-        FROM company_accounts
-        WHERE user_id = ?
-        LIMIT 1
-        """,
-        (user_id,)
-    )
+    try:
 
-    result = cursor.fetchone()
+        cursor.execute(
+            """
+            SELECT 1
+            FROM company_accounts
+            WHERE user_id = ?
+            LIMIT 1
+            """,
+            (user_id,)
+        )
 
-    connection.close()
+        result = cursor.fetchone()
 
-    return result is not None
+        return result is not None
+
+    finally:
+        connection.close()
 
 
 # ============================================================
 # GET USER'S COMPANY
-#
-# Since one company account can own only one company,
-# this returns a single company.
 # ============================================================
 
 def get_user_company(
     user_id: int
 ):
+    """
+    Return the company connected to a user.
+
+    One company account can own one company.
+    """
 
     connection = get_auth_connection()
     cursor = connection.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.company_name,
-            c.email,
-            c.website,
-            c.industry,
-            c.location,
-            c.description,
-            c.logo_url,
-            c.created_at,
-            c.updated_at
-        FROM companies c
-        INNER JOIN company_accounts ca
-            ON c.id = ca.company_id
-        WHERE ca.user_id = ?
-        ORDER BY c.created_at DESC
-        LIMIT 1
-        """,
-        (user_id,)
-    )
+    try:
 
-    company = cursor.fetchone()
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.company_name,
+                c.email,
+                c.website,
+                c.industry,
+                c.location,
+                c.description,
+                c.logo_url,
+                c.created_at,
+                c.updated_at
+            FROM companies c
+            INNER JOIN company_accounts ca
+                ON c.id = ca.company_id
+            WHERE ca.user_id = ?
+            ORDER BY c.created_at DESC
+            LIMIT 1
+            """,
+            (user_id,)
+        )
 
-    connection.close()
+        company = cursor.fetchone()
+
+    finally:
+        connection.close()
 
     if company is None:
         return None
@@ -410,44 +375,46 @@ def get_user_company(
 
 # ============================================================
 # GET USER COMPANIES
-#
-# Kept for compatibility with existing code.
-# In the new architecture this will normally return
-# zero or one company.
 # ============================================================
 
 def get_user_companies(
     user_id: int
 ):
+    """
+    Kept for compatibility with existing CareerIQ code.
+    """
 
     connection = get_auth_connection()
     cursor = connection.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            c.id,
-            c.company_name,
-            c.email,
-            c.website,
-            c.industry,
-            c.location,
-            c.description,
-            c.logo_url,
-            c.created_at,
-            c.updated_at
-        FROM companies c
-        INNER JOIN company_accounts ca
-            ON c.id = ca.company_id
-        WHERE ca.user_id = ?
-        ORDER BY c.created_at DESC
-        """,
-        (user_id,)
-    )
+    try:
 
-    companies = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT
+                c.id,
+                c.company_name,
+                c.email,
+                c.website,
+                c.industry,
+                c.location,
+                c.description,
+                c.logo_url,
+                c.created_at,
+                c.updated_at
+            FROM companies c
+            INNER JOIN company_accounts ca
+                ON c.id = ca.company_id
+            WHERE ca.user_id = ?
+            ORDER BY c.created_at DESC
+            """,
+            (user_id,)
+        )
 
-    connection.close()
+        companies = cursor.fetchall()
+
+    finally:
+        connection.close()
 
     return [
         dict(company)
@@ -457,15 +424,17 @@ def get_user_companies(
 
 # ============================================================
 # LINK COMPANY TO USER
-#
-# IMPORTANT:
-# A company account can have ONLY ONE company.
 # ============================================================
 
 def link_company_to_user(
     user_id: int,
     company_id: int
 ):
+    """
+    Link a company to a company account.
+
+    A company account can have only one company.
+    """
 
     connection = get_auth_connection()
     cursor = connection.cursor()
@@ -494,7 +463,6 @@ def link_company_to_user(
             existing_company_id = existing["company_id"]
 
             if existing_company_id == company_id:
-
                 return True
 
             raise ValueError(
@@ -524,16 +492,26 @@ def link_company_to_user(
 
         return True
 
-    except sqlite3.IntegrityError as error:
+    except Exception as error:
 
         connection.rollback()
+
+        error_message = str(error).lower()
+
+        if (
+            "duplicate key" in error_message
+            or "unique constraint" in error_message
+        ):
+            raise ValueError(
+                "Could not link company to account: "
+                "the company is already linked."
+            )
 
         raise ValueError(
             f"Could not link company to account: {error}"
         )
 
     finally:
-
         connection.close()
 
 
@@ -544,25 +522,31 @@ def link_company_to_user(
 def get_user(
     user_id: int
 ):
+    """
+    Get a user by ID.
+    """
 
     connection = get_auth_connection()
     cursor = connection.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            email,
-            role
-        FROM users
-        WHERE id = ?
-        """,
-        (user_id,)
-    )
+    try:
 
-    user = cursor.fetchone()
+        cursor.execute(
+            """
+            SELECT
+                id,
+                email,
+                role
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,)
+        )
 
-    connection.close()
+        user = cursor.fetchone()
+
+    finally:
+        connection.close()
 
     if user is None:
         return None
@@ -571,7 +555,7 @@ def get_user(
 
 
 # ============================================================
-# INITIALIZE
+# INITIALIZE / VERIFY
 # ============================================================
 
 initialize_auth_database()

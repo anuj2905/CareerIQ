@@ -1,16 +1,237 @@
-import sqlite3
-from pathlib import Path
+import os
+import re
+
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
 
 
 # ============================================================
-# DATABASE PATH
+# LOAD ENVIRONMENT VARIABLES
 # ============================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv()
 
-DATA_DIRECTORY = PROJECT_ROOT / "data"
 
-DATABASE_PATH = DATA_DIRECTORY / "careeriq.db"
+# ============================================================
+# DATABASE URL
+# ============================================================
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set in the .env file."
+    )
+
+
+# ============================================================
+# POSTGRESQL CURSOR ADAPTER
+# ============================================================
+
+class CareerIQCursor:
+    """
+    Small compatibility wrapper around PostgreSQL cursor.
+
+    Existing CareerIQ repository code currently uses:
+
+        ?
+        row["column"]
+        cursor.lastrowid
+
+    PostgreSQL normally uses:
+
+        %s
+        dictionary rows
+        RETURNING id
+
+    This wrapper allows the existing repository code
+    to continue working while we migrate the database.
+    """
+
+    def __init__(self, connection):
+        self.connection = connection
+
+        self.cursor = connection.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        )
+
+        self.lastrowid = None
+
+    # --------------------------------------------------------
+    # Convert SQLite placeholders to PostgreSQL placeholders
+    # --------------------------------------------------------
+
+    @staticmethod
+    def _convert_placeholders(sql: str) -> str:
+
+        return sql.replace("?", "%s")
+
+    # --------------------------------------------------------
+    # Execute
+    # --------------------------------------------------------
+
+    def execute(self, sql, parameters=None):
+
+        sql = self._convert_placeholders(sql)
+
+        clean_sql = sql.strip()
+
+        self.lastrowid = None
+
+        # ----------------------------------------------------
+        # PostgreSQL does not provide cursor.lastrowid.
+        #
+        # Existing CareerIQ code expects it after INSERT.
+        #
+        # Add RETURNING id automatically.
+        # ----------------------------------------------------
+
+        if (
+            clean_sql.upper().startswith("INSERT")
+            and "RETURNING" not in clean_sql.upper()
+        ):
+
+            sql = sql.rstrip().rstrip(";")
+
+            sql = f"{sql} RETURNING id"
+
+            if parameters is None:
+                self.cursor.execute(sql)
+            else:
+                self.cursor.execute(
+                    sql,
+                    parameters
+                )
+
+            row = self.cursor.fetchone()
+
+            if row is not None:
+                self.lastrowid = row["id"]
+
+            return
+
+        # ----------------------------------------------------
+        # Normal query
+        # ----------------------------------------------------
+
+        if parameters is None:
+
+            self.cursor.execute(sql)
+
+        else:
+
+            self.cursor.execute(
+                sql,
+                parameters
+            )
+
+    # --------------------------------------------------------
+    # Fetch one
+    # --------------------------------------------------------
+
+    def fetchone(self):
+
+        return self.cursor.fetchone()
+
+    # --------------------------------------------------------
+    # Fetch all
+    # --------------------------------------------------------
+
+    def fetchall(self):
+
+        return self.cursor.fetchall()
+
+    # --------------------------------------------------------
+    # Row count
+    # --------------------------------------------------------
+
+    @property
+    def rowcount(self):
+
+        return self.cursor.rowcount
+
+    # --------------------------------------------------------
+    # Close
+    # --------------------------------------------------------
+
+    def close(self):
+
+        self.cursor.close()
+
+
+# ============================================================
+# POSTGRESQL CONNECTION ADAPTER
+# ============================================================
+
+class CareerIQConnection:
+    """
+    PostgreSQL connection wrapper used by CareerIQ.
+    """
+
+    def __init__(self, connection):
+
+        self.connection = connection
+
+    # --------------------------------------------------------
+    # Cursor
+    # --------------------------------------------------------
+
+    def cursor(self):
+
+        return CareerIQCursor(
+            self.connection
+        )
+
+    # --------------------------------------------------------
+    # Commit
+    # --------------------------------------------------------
+
+    def commit(self):
+
+        self.connection.commit()
+
+    # --------------------------------------------------------
+    # Rollback
+    # --------------------------------------------------------
+
+    def rollback(self):
+
+        self.connection.rollback()
+
+    # --------------------------------------------------------
+    # Close
+    # --------------------------------------------------------
+
+    def close(self):
+
+        self.connection.close()
+
+    # --------------------------------------------------------
+    # Context manager
+    # --------------------------------------------------------
+
+    def __enter__(self):
+
+        return self
+
+    def __exit__(
+        self,
+        exc_type,
+        exc_value,
+        traceback
+    ):
+
+        if exc_type:
+
+            self.rollback()
+
+        else:
+
+            self.commit()
+
+        self.close()
 
 
 # ============================================================
@@ -19,26 +240,31 @@ DATABASE_PATH = DATA_DIRECTORY / "careeriq.db"
 
 def get_connection():
     """
-    Create and return a SQLite database connection.
+    Create a PostgreSQL connection to Supabase.
+
+    The connection string is read from:
+
+        DATABASE_URL
+
+    inside the .env file.
     """
 
-    DATA_DIRECTORY.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    try:
 
-    connection = sqlite3.connect(
-        DATABASE_PATH,
-        check_same_thread=False
-    )
+        connection = psycopg2.connect(
+            DATABASE_URL
+        )
 
-    connection.row_factory = sqlite3.Row
+        return CareerIQConnection(
+            connection
+        )
 
-    connection.execute(
-        "PRAGMA foreign_keys = ON"
-    )
+    except Exception as e:
 
-    return connection
+        raise RuntimeError(
+            "Could not connect to Supabase PostgreSQL. "
+            f"Database error: {e}"
+        ) from e
 
 
 # ============================================================
@@ -47,321 +273,190 @@ def get_connection():
 
 def initialize_database():
     """
-    Create all CareerIQ database tables if they do not exist.
+    Verify that the CareerIQ PostgreSQL database is reachable.
+
+    The actual tables are already created in Supabase,
+    so this function does NOT recreate the schema.
+
+    It exists because repositories.py currently calls:
+
+        initialize_database()
     """
 
-    connection = get_connection()
+    connection = None
 
     try:
 
+        connection = get_connection()
+
         cursor = connection.cursor()
 
-        # ====================================================
-        # STUDENT PROFILE
-        # ====================================================
-
         cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS student_profiles (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                name TEXT,
-
-                resume_text TEXT,
-
-                resume_file_name TEXT,
-
-                resume_file_size INTEGER,
-
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-
-            )
-            """
+            "SELECT 1 AS connected"
         )
 
-        # ====================================================
-        # EDUCATION
-        # ====================================================
+        result = cursor.fetchone()
 
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS education (
+        cursor.close()
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+        if not result:
 
-                student_id INTEGER NOT NULL,
-
-                education TEXT NOT NULL,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE
-
+            raise RuntimeError(
+                "Database connection test failed."
             )
-            """
+
+        print(
+            "CareerIQ database connected successfully."
         )
 
-        # ====================================================
-        # SKILLS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS skills (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                student_id INTEGER NOT NULL,
-
-                skill TEXT NOT NULL,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # PROJECTS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS projects (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                student_id INTEGER NOT NULL,
-
-                project TEXT NOT NULL,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # EXPERIENCE
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS experience (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                student_id INTEGER NOT NULL,
-
-                experience TEXT NOT NULL,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # CERTIFICATIONS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS certifications (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                student_id INTEGER NOT NULL,
-
-                certification TEXT NOT NULL,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # COMPANY
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS companies (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                company_name TEXT NOT NULL,
-
-                email TEXT,
-
-                website TEXT,
-
-                industry TEXT,
-
-                location TEXT,
-
-                description TEXT,
-
-                logo_url TEXT,
-
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-
-            )
-            """
-        )
-
-        # ====================================================
-        # JOBS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS jobs (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                company_id INTEGER NOT NULL,
-
-                title TEXT NOT NULL,
-
-                description TEXT NOT NULL,
-
-                location TEXT,
-
-                employment_type TEXT,
-
-                experience_required REAL DEFAULT 0,
-
-                education_required TEXT,
-
-                salary_min REAL,
-
-                salary_max REAL,
-
-                status TEXT DEFAULT 'active',
-
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                FOREIGN KEY (company_id)
-                    REFERENCES companies(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # JOB SKILLS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS job_skills (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                job_id INTEGER NOT NULL,
-
-                skill TEXT NOT NULL,
-
-                FOREIGN KEY (job_id)
-                    REFERENCES jobs(id)
-                    ON DELETE CASCADE
-
-            )
-            """
-        )
-
-        # ====================================================
-        # JOB APPLICATIONS
-        # ====================================================
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS job_applications (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                job_id INTEGER NOT NULL,
-
-                student_id INTEGER NOT NULL,
-
-                match_score REAL,
-
-                application_status TEXT DEFAULT 'applied',
-
-                applied_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-                FOREIGN KEY (job_id)
-                    REFERENCES jobs(id)
-                    ON DELETE CASCADE,
-
-                FOREIGN KEY (student_id)
-                    REFERENCES student_profiles(id)
-                    ON DELETE CASCADE,
-
-                UNIQUE(job_id, student_id)
-
-            )
-            """
-        )
-
-        # ====================================================
-        # COMMIT CHANGES
-        # ====================================================
-
-        connection.commit()
-
-    except Exception:
-
-        connection.rollback()
-
-        raise
+    except Exception as e:
+
+        raise RuntimeError(
+            "CareerIQ could not connect to "
+            "Supabase PostgreSQL."
+        ) from e
 
     finally:
 
-        connection.close()
+        if connection is not None:
+
+            connection.close()
 
 
 # ============================================================
-# DATABASE TEST
+# DATABASE STATUS
+# ============================================================
+
+def test_database_connection():
+    """
+    Simple database connection test.
+
+    Returns True when Supabase PostgreSQL is reachable.
+    """
+
+    connection = None
+
+    try:
+
+        connection = get_connection()
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "SELECT 1 AS test"
+        )
+
+        result = cursor.fetchone()
+
+        cursor.close()
+
+        return (
+            result is not None
+            and result["test"] == 1
+        )
+
+    except Exception:
+
+        return False
+
+    finally:
+
+        if connection is not None:
+
+            connection.close()
+
+
+# ============================================================
+# DATABASE INFORMATION
+# ============================================================
+
+def get_database_info():
+    """
+    Return basic information about the connected
+    PostgreSQL database.
+    """
+
+    connection = None
+
+    try:
+
+        connection = get_connection()
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                current_database() AS database_name,
+                current_user AS database_user,
+                version() AS version
+            """
+        )
+
+        result = cursor.fetchone()
+
+        cursor.close()
+
+        return result
+
+    finally:
+
+        if connection is not None:
+
+            connection.close()
+
+
+# ============================================================
+# TEST
 # ============================================================
 
 if __name__ == "__main__":
 
     print()
     print("==========================================")
-    print("       CareerIQ Database")
+    print("       CareerIQ PostgreSQL Test")
     print("==========================================")
     print()
 
-    initialize_database()
+    try:
 
-    print(
-        "Database initialized successfully."
-    )
+        if test_database_connection():
 
-    print(
-        f"Database location: {DATABASE_PATH}"
-    )
+            print(
+                "✅ Supabase PostgreSQL connection successful."
+            )
+
+            info = get_database_info()
+
+            if info:
+
+                print(
+                    "Database:",
+                    info["database_name"]
+                )
+
+                print(
+                    "User:",
+                    info["database_user"]
+                )
+
+            print()
+            print(
+                "CareerIQ database is ready."
+            )
+
+        else:
+
+            print(
+                "❌ Database connection failed."
+            )
+
+    except Exception as e:
+
+        print(
+            "❌ Database error:"
+        )
+
+        print(e)
 
     print()
-    print("==========================================")

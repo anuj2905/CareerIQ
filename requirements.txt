@@ -95,3 +95,8 @@ plotly
 # Utilities
 # ------------------------------
 tqdm
+
+
+# Supabase
+
+psycopg2-binary

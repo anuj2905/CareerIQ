@@ -64,9 +64,34 @@ def _inject_job_discovery_style():
 
     div[data-baseweb="input"] > div,
     div[data-baseweb="select"] > div {
-        background:rgba(255,255,255,.9) !important;
+        background:rgba(255,255,255,.96) !important;
         border-color:rgba(7,59,92,.15) !important;
         border-radius:12px !important;
+        color:#073b5c !important;
+    }
+    div[data-baseweb="input"] input,
+    div[data-baseweb="select"] input,
+    div[data-baseweb="select"] [role="combobox"],
+    div[data-baseweb="select"] [data-baseweb="select-value"],
+    div[data-baseweb="select"] span {
+        color:#073b5c !important;
+        -webkit-text-fill-color:#073b5c !important;
+    }
+    div[data-baseweb="select"] svg {
+        fill:#073b5c !important;
+    }
+    [data-baseweb="popover"],
+    [data-baseweb="menu"] {
+        background:#ffffff !important;
+        color:#073b5c !important;
+    }
+    [data-baseweb="menu"] [role="option"] {
+        color:#073b5c !important;
+        background:#ffffff !important;
+    }
+    [data-baseweb="menu"] [role="option"]:hover {
+        background:#eef8fa !important;
+        color:#073b5c !important;
     }
     label { color:#36546a !important; font-weight:700 !important; }
     .stButton > button { border-radius:12px; font-weight:750; }

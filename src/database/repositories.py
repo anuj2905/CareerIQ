@@ -21,97 +21,411 @@ initialize_database()
 
 
 # ============================================================
+# STUDENT ACCOUNT / PROFILE HELPERS
+# ============================================================
+
+def get_student_id_for_user(
+    user_id: int
+) -> Optional[int]:
+    """
+    Return the student_profiles.id linked to a users.id.
+
+    The relationship is:
+
+        users.id
+            ↓
+        student_accounts.user_id
+            ↓
+        student_accounts.student_id
+            ↓
+        student_profiles.id
+    """
+
+    if user_id is None:
+        return None
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT student_id
+            FROM student_accounts
+            WHERE user_id = ?
+            LIMIT 1
+            """,
+            (user_id,)
+        )
+
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        return row["student_id"]
+
+    finally:
+        connection.close()
+
+
+def link_student_to_user(
+    user_id: int,
+    student_id: int
+) -> bool:
+    """
+    Link a student profile to an authenticated user.
+
+    A student account row must already exist because it is created
+    during student registration.
+    """
+
+    if user_id is None:
+        raise ValueError("User ID is required.")
+
+    if student_id is None:
+        raise ValueError("Student ID is required.")
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE student_accounts
+            SET student_id = ?
+            WHERE user_id = ?
+            """,
+            (
+                student_id,
+                user_id
+            )
+        )
+
+        updated = cursor.rowcount > 0
+
+        connection.commit()
+
+        return updated
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+def ensure_student_profile_for_user(
+    user_id: int
+) -> Optional[int]:
+    """
+    Return the student's profile ID for the authenticated user.
+
+    If the student account exists but has no profile yet, this function
+    creates an empty student_profiles record and links it to the account.
+
+    This is the central identity bridge for the student side of CareerIQ.
+    """
+
+    if user_id is None:
+        raise ValueError("User ID is required.")
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+
+        # ----------------------------------------------------
+        # CHECK STUDENT ACCOUNT
+        # ----------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                student_id
+            FROM student_accounts
+            WHERE user_id = ?
+            LIMIT 1
+            """,
+            (user_id,)
+        )
+
+        account = cursor.fetchone()
+
+        if account is None:
+            raise ValueError(
+                "No student account is linked to this user."
+            )
+
+        # ----------------------------------------------------
+        # PROFILE ALREADY EXISTS
+        # ----------------------------------------------------
+
+        if account["student_id"] is not None:
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM student_profiles
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (account["student_id"],)
+            )
+
+            profile = cursor.fetchone()
+
+            if profile is not None:
+                return profile["id"]
+
+            # The account points to a missing profile.
+            # We repair the mapping below.
+            student_id = None
+
+        else:
+            student_id = None
+
+        # ----------------------------------------------------
+        # CREATE EMPTY PROFILE
+        # ----------------------------------------------------
+
+        cursor.execute(
+            """
+            INSERT INTO student_profiles (
+                name,
+                resume_text,
+                resume_file_name,
+                resume_file_size
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "",
+                "",
+                "",
+                0
+            )
+        )
+
+        student_id = cursor.lastrowid
+
+        # ----------------------------------------------------
+        # LINK PROFILE TO STUDENT ACCOUNT
+        # ----------------------------------------------------
+
+        cursor.execute(
+            """
+            UPDATE student_accounts
+            SET student_id = ?
+            WHERE user_id = ?
+            """,
+            (
+                student_id,
+                user_id
+            )
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                "Student account could not be linked."
+            )
+
+        connection.commit()
+
+        return student_id
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+# ============================================================
 # STUDENT PROFILE
 # ============================================================
 
 def save_student_profile(
     profile: StudentProfile,
-    student_id: int = 1
+    student_id: Optional[int] = None,
+    user_id: Optional[int] = None
 ) -> int:
     """
-    Save or update a student profile.
+    Save or update a complete student profile.
 
-    CareerIQ currently uses student_id=1 because this is
-    a single-user local application.
+    Preferred usage:
 
-    Later, authentication can provide different student IDs.
+        save_student_profile(profile, user_id=user_id)
+
+    or, when the profile ID is already known:
+
+        save_student_profile(profile, student_id=student_id)
+
+    The database generates student_profiles.id. The authenticated
+    user's student_accounts row is then linked to that profile.
     """
+
+    if profile is None:
+        raise ValueError("Student profile is required.")
 
     connection = get_connection()
 
     try:
-
         cursor = connection.cursor()
 
         # ----------------------------------------------------
-        # CHECK WHETHER STUDENT EXISTS
+        # RESOLVE PROFILE ID FROM AUTHENTICATED USER
         # ----------------------------------------------------
 
-        cursor.execute(
-            """
-            SELECT id
-            FROM student_profiles
-            WHERE id = ?
-            """,
-            (student_id,)
-        )
-
-        existing_student = cursor.fetchone()
-
-        # ----------------------------------------------------
-        # UPDATE EXISTING STUDENT
-        # ----------------------------------------------------
-
-        if existing_student:
+        if user_id is not None:
 
             cursor.execute(
                 """
-                UPDATE student_profiles
-
-                SET
-                    name = ?,
-                    resume_text = ?,
-                    resume_file_name = ?,
-                    resume_file_size = ?,
-                    updated_at = CURRENT_TIMESTAMP
-
-                WHERE id = ?
+                SELECT student_id
+                FROM student_accounts
+                WHERE user_id = ?
+                LIMIT 1
                 """,
-                (
-                    profile.name,
-                    profile.resume_text,
-                    profile.resume_file_name,
-                    profile.resume_file_size,
-                    student_id
-                )
+                (user_id,)
             )
 
+            account = cursor.fetchone()
+
+            if account is None:
+                raise ValueError(
+                    "No student account is linked to this user."
+                )
+
+            linked_student_id = account["student_id"]
+
+            if linked_student_id is not None:
+
+                cursor.execute(
+                    """
+                    SELECT id
+                    FROM student_profiles
+                    WHERE id = ?
+                    LIMIT 1
+                    """,
+                    (linked_student_id,)
+                )
+
+                existing_profile = cursor.fetchone()
+
+                if existing_profile is not None:
+                    student_id = linked_student_id
+
         # ----------------------------------------------------
-        # CREATE NEW STUDENT
+        # CREATE NEW PROFILE WHEN NECESSARY
         # ----------------------------------------------------
 
-        else:
+        if student_id is None:
 
             cursor.execute(
                 """
                 INSERT INTO student_profiles (
-                    id,
                     name,
                     resume_text,
                     resume_file_name,
                     resume_file_size
                 )
-
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?)
                 """,
                 (
-                    student_id,
                     profile.name,
                     profile.resume_text,
                     profile.resume_file_name,
                     profile.resume_file_size
                 )
             )
+
+            student_id = cursor.lastrowid
+
+        else:
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM student_profiles
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (student_id,)
+            )
+
+            existing_student = cursor.fetchone()
+
+            if existing_student:
+
+                cursor.execute(
+                    """
+                    UPDATE student_profiles
+                    SET
+                        name = ?,
+                        resume_text = ?,
+                        resume_file_name = ?,
+                        resume_file_size = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        profile.name,
+                        profile.resume_text,
+                        profile.resume_file_name,
+                        profile.resume_file_size,
+                        student_id
+                    )
+                )
+
+            else:
+
+                cursor.execute(
+                    """
+                    INSERT INTO student_profiles (
+                        name,
+                        resume_text,
+                        resume_file_name,
+                        resume_file_size
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        profile.name,
+                        profile.resume_text,
+                        profile.resume_file_name,
+                        profile.resume_file_size
+                    )
+                )
+
+                student_id = cursor.lastrowid
+
+        # ----------------------------------------------------
+        # LINK PROFILE TO AUTHENTICATED USER
+        # ----------------------------------------------------
+
+        if user_id is not None:
+
+            cursor.execute(
+                """
+                UPDATE student_accounts
+                SET student_id = ?
+                WHERE user_id = ?
+                """,
+                (
+                    student_id,
+                    user_id
+                )
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    "Student account could not be linked to the profile."
+                )
 
         # ----------------------------------------------------
         # REMOVE OLD RELATED DATA
@@ -161,7 +475,7 @@ def save_student_profile(
         # SAVE EDUCATION
         # ----------------------------------------------------
 
-        for education in profile.education:
+        for education in profile.education or []:
 
             if education and str(education).strip():
 
@@ -171,7 +485,6 @@ def save_student_profile(
                         student_id,
                         education
                     )
-
                     VALUES (?, ?)
                     """,
                     (
@@ -184,7 +497,7 @@ def save_student_profile(
         # SAVE SKILLS
         # ----------------------------------------------------
 
-        for skill in profile.skills:
+        for skill in profile.skills or []:
 
             if skill and str(skill).strip():
 
@@ -194,7 +507,6 @@ def save_student_profile(
                         student_id,
                         skill
                     )
-
                     VALUES (?, ?)
                     """,
                     (
@@ -207,7 +519,7 @@ def save_student_profile(
         # SAVE PROJECTS
         # ----------------------------------------------------
 
-        for project in profile.projects:
+        for project in profile.projects or []:
 
             if project and str(project).strip():
 
@@ -217,7 +529,6 @@ def save_student_profile(
                         student_id,
                         project
                     )
-
                     VALUES (?, ?)
                     """,
                     (
@@ -230,7 +541,7 @@ def save_student_profile(
         # SAVE EXPERIENCE
         # ----------------------------------------------------
 
-        for experience in profile.experience:
+        for experience in profile.experience or []:
 
             if experience and str(experience).strip():
 
@@ -240,7 +551,6 @@ def save_student_profile(
                         student_id,
                         experience
                     )
-
                     VALUES (?, ?)
                     """,
                     (
@@ -253,7 +563,7 @@ def save_student_profile(
         # SAVE CERTIFICATIONS
         # ----------------------------------------------------
 
-        for certification in profile.certifications:
+        for certification in profile.certifications or []:
 
             if certification and str(certification).strip():
 
@@ -263,7 +573,6 @@ def save_student_profile(
                         student_id,
                         certification
                     )
-
                     VALUES (?, ?)
                     """,
                     (
@@ -277,13 +586,10 @@ def save_student_profile(
         return student_id
 
     except Exception:
-
         connection.rollback()
-
         raise
 
     finally:
-
         connection.close()
 
 
@@ -292,10 +598,14 @@ def save_student_profile(
 # ============================================================
 
 def get_student_profile(
-    student_id: int = 1
+    student_id: Optional[int] = None,
+    user_id: Optional[int] = None
 ) -> Optional[StudentProfile]:
     """
-    Retrieve a complete student profile from the database.
+    Retrieve a complete student profile.
+
+    Either student_id or user_id may be supplied.
+    user_id is preferred from authenticated UI flows.
     """
 
     connection = get_connection()
@@ -303,6 +613,35 @@ def get_student_profile(
     try:
 
         cursor = connection.cursor()
+
+        # ----------------------------------------------------
+        # RESOLVE STUDENT ID FROM USER ID
+        # ----------------------------------------------------
+
+        if user_id is not None:
+
+            cursor.execute(
+                """
+                SELECT student_id
+                FROM student_accounts
+                WHERE user_id = ?
+                LIMIT 1
+                """,
+                (user_id,)
+            )
+
+            account = cursor.fetchone()
+
+            if account is None:
+                return None
+
+            student_id = account["student_id"]
+
+            if student_id is None:
+                return None
+
+        if student_id is None:
+            return None
 
         # ----------------------------------------------------
         # STUDENT
@@ -316,9 +655,7 @@ def get_student_profile(
                 resume_text,
                 resume_file_name,
                 resume_file_size
-
             FROM student_profiles
-
             WHERE id = ?
             """,
             (student_id,)
@@ -429,36 +766,19 @@ def get_student_profile(
         # ----------------------------------------------------
 
         return StudentProfile(
-
             id=student["id"],
-
             name=student["name"] or "",
-
             education=education,
-
             skills=skills,
-
             projects=projects,
-
             experience=experience,
-
             certifications=certifications,
-
-            resume_text=(
-                student["resume_text"] or ""
-            ),
-
-            resume_file_name=(
-                student["resume_file_name"] or ""
-            ),
-
-            resume_file_size=(
-                student["resume_file_size"] or 0
-            )
+            resume_text=student["resume_text"] or "",
+            resume_file_name=student["resume_file_name"] or "",
+            resume_file_size=student["resume_file_size"] or 0
         )
 
     finally:
-
         connection.close()
 
 
@@ -467,11 +787,17 @@ def get_student_profile(
 # ============================================================
 
 def delete_student_profile(
-    student_id: int = 1
+    student_id: int
 ):
     """
     Delete a student's complete profile.
+
+    student_accounts.student_id is set to NULL by the database
+    foreign-key rule before/when the profile is removed.
     """
+
+    if student_id is None:
+        raise ValueError("Student ID is required.")
 
     connection = get_connection()
 
@@ -490,13 +816,10 @@ def delete_student_profile(
         connection.commit()
 
     except Exception:
-
         connection.rollback()
-
         raise
 
     finally:
-
         connection.close()
 
 
@@ -505,11 +828,14 @@ def delete_student_profile(
 # ============================================================
 
 def student_profile_exists(
-    student_id: int = 1
+    student_id: int
 ) -> bool:
     """
     Check whether a student profile exists.
     """
+
+    if student_id is None:
+        return False
 
     connection = get_connection()
 
@@ -530,7 +856,6 @@ def student_profile_exists(
         return cursor.fetchone() is not None
 
     finally:
-
         connection.close()
 
 
@@ -1502,37 +1827,10 @@ if __name__ == "__main__":
     print("==========================================")
     print()
 
-    profile = get_student_profile()
-
-    if profile is None:
-
-        print(
-            "No student profile found."
-        )
-
-    else:
-
-        print(
-            "Student:",
-            profile.name
-        )
-
-        print(
-            "Skills:",
-            len(profile.skills)
-        )
-
-        print(
-            "Projects:",
-            len(profile.projects)
-        )
-
-        print(
-            "Education:",
-            len(profile.education)
-        )
-
-    print()
+    print(
+        "Student profile test requires an explicit authenticated "
+        "user ID or student profile ID."
+    )
 
     companies = get_all_companies()
 
@@ -1542,9 +1840,7 @@ if __name__ == "__main__":
     )
 
     print()
-
     print(
         "Repository test completed."
     )
-
     print()

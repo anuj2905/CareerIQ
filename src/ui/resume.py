@@ -64,6 +64,13 @@ from src.database.repositories import (
     get_student_profile
 )
 
+from src.database.repositories import (
+    get_student_id_for_user,
+    ensure_student_profile_for_user,
+    save_student_profile,
+    get_student_profile,
+)
+
 # JOB DISCOVERY
 from src.job_discovery.job_fetcher import (
     fetch_remote_jobs
@@ -84,58 +91,60 @@ ROLE_REQUIRED_SKILLS = {
 # DATABASE PROFILE LOADER
 # ==================================================
 
-def load_profile_from_database():
+def _get_current_student_id() -> int | None:
     """
-    Load the saved student profile from SQLite
-    and convert it into ResumeProfile format.
+    Resolve the authenticated student's real profile ID.
+
+    For a newly registered student, student_accounts.student_id may be NULL.
+    In that case, create the initial student_profiles row and link it to the
+    authenticated user through the repository layer.
     """
+    user_id = st.session_state.get("user_id")
+    user_role = st.session_state.get("user_role")
+
+    if user_id is None or user_role != "student":
+        return None
 
     try:
+        user_id = int(user_id)
 
-        stored_profile = get_student_profile()
+        student_id = get_student_id_for_user(user_id)
 
-        if stored_profile is None:
-            return None
+        if student_id is None:
+            student_id = ensure_student_profile_for_user(user_id)
 
-        profile = ResumeProfile(
-            name=stored_profile.name,
-            education=stored_profile.education,
-            skills=stored_profile.skills,
-            projects=stored_profile.projects,
-            experience=stored_profile.experience,
-            certifications=stored_profile.certifications
-        )
+        if student_id is not None:
+            st.session_state["student_id"] = student_id
 
-        # Restore session state
-        st.session_state["resume_profile"] = profile
-        st.session_state["profile"] = profile
+        return student_id
 
-        st.session_state["resume_text"] = (
-            stored_profile.resume_text
-        )
-
-        st.session_state["resume_file_name"] = (
-            stored_profile.resume_file_name
-        )
-
-        st.session_state["resume_file_size"] = (
-            stored_profile.resume_file_size
-        )
-
-        return profile
-
-    except Exception as e:
-
-        st.warning(
-            f"Could not load saved resume from database: {e}"
-        )
-
+    except (TypeError, ValueError, Exception) as exc:
+        st.error(f"Unable to identify your student profile: {exc}")
         return None
 
 
-# ==================================================
-# CLEAR CURRENT RESUME DATA
-# ==================================================
+def load_profile_from_database():
+    """
+    Load the authenticated student's profile from Supabase.
+    If the account has no profile yet, create the initial profile mapping.
+    """
+    student_id = _get_current_student_id()
+
+    if student_id is None:
+        return None
+
+    try:
+        profile = get_student_profile(student_id=student_id)
+
+        if profile is not None:
+            st.session_state["profile"] = profile
+            st.session_state["student_id"] = student_id
+
+        return profile
+
+    except Exception as exc:
+        st.error(f"Unable to load your profile: {exc}")
+        return None
 
 def clear_resume_data():
 
@@ -375,6 +384,29 @@ def style_resume_workspace():
         input, textarea {
             color: #123b59 !important;
             caret-color: #0ba7a7 !important;
+        }
+
+        /* Selectbox text + dropdown options: always readable. */
+        div[data-baseweb="select"] *,
+        div[data-baseweb="input"] *,
+        div[data-baseweb="textarea"] * {
+            color: #123b59 !important;
+        }
+
+        div[data-baseweb="popover"] {
+            background: #ffffff !important;
+            color: #123b59 !important;
+        }
+
+        div[role="listbox"],
+        div[role="option"] {
+            background: #ffffff !important;
+            color: #123b59 !important;
+        }
+
+        div[role="option"]:hover {
+            background: #eef8f7 !important;
+            color: #087d8a !important;
         }
 
         label,
@@ -782,9 +814,22 @@ def upload_and_analyze_resume():
             # STEP 4: SAVE TO DATABASE
             # ==========================================
 
+            student_id = _get_current_student_id()
+
+            if student_id is None:
+                st.error(
+                    "Your student account could not be identified. "
+                    "Please log out and log in again."
+                )
+                return False
+
             save_student_profile(
-                student_profile
+                student_profile,
+                student_id=student_id,
+                user_id=int(st.session_state["user_id"])
             )
+
+            st.session_state["student_id"] = int(student_id)
 
             # ==========================================
             # STEP 5: STORE RESUME DATA IN SESSION
@@ -2241,8 +2286,9 @@ def show_job_discovery():
 
         work_mode = st.selectbox(
             "Work Mode",
-            ["Remote"],
-            index=0
+            ["All", "Remote", "Hybrid", "On-site"],
+            index=0,
+            help="Choose the type of workplace you prefer."
         )
 
     with col2:
@@ -2281,7 +2327,11 @@ def show_job_discovery():
                 jobs = fetch_remote_jobs(
                     keyword=target_role,
                     location=location,
-                    work_mode=work_mode,
+                    work_mode=(
+                        ""
+                        if work_mode == "All"
+                        else work_mode
+                    ),
                     resume_skills=profile.skills,
                     limit=result_limit
                 )

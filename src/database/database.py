@@ -17,13 +17,46 @@ load_dotenv()
 # DATABASE URL
 # ============================================================
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def _get_database_url():
+    """
+    Get the Supabase PostgreSQL connection string.
 
+    Local development:
+        Reads DATABASE_URL from .env.
 
-if not DATABASE_URL:
+    Streamlit Cloud:
+        Reads DATABASE_URL from Streamlit Secrets.
+
+    The same code therefore works both locally and in production.
+    """
+
+    # First try environment variables.
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        return database_url
+
+    # Streamlit Cloud stores secrets in st.secrets instead of .env.
+    try:
+        import streamlit as st
+
+        database_url = st.secrets.get("DATABASE_URL")
+
+        if database_url:
+            return database_url
+    except Exception:
+        # Streamlit is not available when running normal local
+        # Python scripts, so simply continue to the final error.
+        pass
+
     raise RuntimeError(
-        "DATABASE_URL is not set in the .env file."
+        "DATABASE_URL is not configured. "
+        "Add DATABASE_URL to your local .env file or "
+        "to Streamlit Cloud → Manage app → Settings → Secrets."
     )
+
+
+DATABASE_URL = _get_database_url()
 
 
 # ============================================================
@@ -242,11 +275,10 @@ def get_connection():
     """
     Create a PostgreSQL connection to Supabase.
 
-    The connection string is read from:
+    The connection string is read from DATABASE_URL.
 
-        DATABASE_URL
-
-    inside the .env file.
+    Locally it comes from .env.
+    On Streamlit Cloud it comes from st.secrets.
     """
 
     try:

@@ -3,102 +3,67 @@
 # AI-Powered Career Intelligence
 # ==============================
 
-# ------------------------------
 # Web Application
-# ------------------------------
 streamlit
 
-# ------------------------------
 # Environment & Configuration
-# ------------------------------
 python-dotenv
 
-# ------------------------------
 # PDF / Document Processing
-# ------------------------------
 pypdf
+PyMuPDF
 python-docx
 
-# ------------------------------
 # Data Processing
-# ------------------------------
 pandas
 numpy
 
-# ------------------------------
 # Machine Learning
-# ------------------------------
 scikit-learn
 
-# ------------------------------
 # NLP
-# ------------------------------
 spacy
 
-# ------------------------------
 # Embeddings / Semantic Search
-# ------------------------------
 sentence-transformers
 faiss-cpu
 
-# ------------------------------
 # LLM / OpenAI
-# ------------------------------
 openai
 
-# ------------------------------
 # RAG / LangChain
-# ------------------------------
 langchain
 langchain-openai
 langchain-community
 langchain-text-splitters
 
-# ------------------------------
 # Vector Database
-# ------------------------------
 chromadb
 
-# ------------------------------
 # Agentic AI
-# ------------------------------
 agno
 
-# ------------------------------
 # HTTP / Web Requests
-# ------------------------------
 requests
 httpx
 
-# ------------------------------
 # Job Data / Web Parsing
-# ------------------------------
 beautifulsoup4
 lxml
 
-# ------------------------------
 # Structured Data Validation
-# ------------------------------
 pydantic
 
-# ------------------------------
 # Database
-# ------------------------------
 SQLAlchemy
-
-# ------------------------------
-# Visualization
-# ------------------------------
-plotly
-
-# ------------------------------
-# Utilities
-# ------------------------------
-tqdm
-
-
-# Supabase
-
 psycopg2-binary
 
-PyMuPDF
+# Visualization
+plotly
+
+# OCR
+pytesseract
+Pillow
+
+# Utilities
+tqdm

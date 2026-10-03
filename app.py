@@ -1,5 +1,4 @@
 import streamlit as st
-
 from dotenv import load_dotenv
 
 from src.ui.home import (
@@ -9,49 +8,20 @@ from src.ui.home import (
     student_feature_page,
 )
 
-from src.ui.job_management import (
-    job_management,
-)
+from src.ui.job_management import job_management
+from src.ui.job_applications import job_applications
+from src.ui.job_details import job_details
+from src.ui.jobs import jobs_page
+from src.ui.resume import resume_page
+from src.ui.assistant import assistant_page
+from src.ui.auth import auth_page
+from src.ui.company_selector import company_selector
+from src.ui.company_profile import company_profile_page
+from src.ui.company_dashboard import company_dashboard
+from src.ui.create_job import create_job
+from src.ui.salary_prediction import salary_prediction_page
 
-from src.ui.job_applications import (
-    job_applications,
-)
-
-from src.ui.job_details import (
-    job_details,
-)
-
-from src.ui.jobs import (
-    jobs_page,
-)
-
-from src.ui.resume import (
-    resume_page,
-)
-
-from src.ui.assistant import (
-    assistant_page,
-)
-
-from src.ui.auth import (
-    auth_page,
-)
-
-from src.ui.company_selector import (
-    company_selector,
-)
-
-from src.ui.company_profile import (
-    company_profile_page,
-)
-
-from src.ui.company_dashboard import (
-    company_dashboard,
-)
-
-from src.ui.create_job import (
-    create_job,
-)
+from src.ui.student_sidebar import show_student_sidebar
 
 
 # ============================================================
@@ -69,101 +39,122 @@ st.set_page_config(
     page_title="CareerIQ",
     page_icon="🧠",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
 # ============================================================
-# GLOBAL STYLE
+# GLOBAL STYLING
 # ============================================================
 
 style_home_page()
 
 
 # ============================================================
-# SESSION STATE
+# SESSION STATE INITIALIZATION
 # ============================================================
 
-if "page" not in st.session_state:
-
-    st.session_state["page"] = "home"
-
-
-if "logged_in" not in st.session_state:
-
-    st.session_state["logged_in"] = False
-
-
-if "user_id" not in st.session_state:
-
-    st.session_state["user_id"] = None
-
-
-if "user_email" not in st.session_state:
-
-    st.session_state["user_email"] = None
-
-
-if "user_role" not in st.session_state:
-
-    st.session_state["user_role"] = None
+DEFAULT_SESSION_STATE = {
+    "page": "home",
+    "logged_in": False,
+    "user_id": None,
+    "user_email": None,
+    "user_role": None,
+    "profile": None,
+    "student_feature": "📄 Resume Overview",
+    "company_id": None,
+    "company_profile": None,
+    "company_saved": False,
+    "last_created_job_id": None,
+    "student_id": None,
+    "discovered_jobs": [],
+    "job_search_role": "",
+    "resume_upload_mode": False,
+    "resume_upload_generation": 0,
+}
 
 
-if "profile" not in st.session_state:
+for key, default_value in DEFAULT_SESSION_STATE.items():
 
-    st.session_state["profile"] = None
+    if key not in st.session_state:
 
-
-if "student_feature" not in st.session_state:
-
-    st.session_state[
-        "student_feature"
-    ] = "📄 Resume Overview"
-
-
-if "company_id" not in st.session_state:
-
-    st.session_state["company_id"] = None
-
-
-if "company_profile" not in st.session_state:
-
-    st.session_state["company_profile"] = None
-
-
-if "company_saved" not in st.session_state:
-
-    st.session_state["company_saved"] = False
-
-
-if "last_created_job_id" not in st.session_state:
-
-    st.session_state["last_created_job_id"] = None
-
-
-if "student_id" not in st.session_state:
-
-    st.session_state["student_id"] = 1
-
-
-if "discovered_jobs" not in st.session_state:
-
-    st.session_state["discovered_jobs"] = []
-
-
-if "job_search_role" not in st.session_state:
-
-    st.session_state["job_search_role"] = ""
+        st.session_state[key] = default_value
 
 
 # ============================================================
 # CURRENT PAGE
 # ============================================================
 
-page = st.session_state["page"]
+page = st.session_state.get(
+    "page",
+    "home",
+)
 
 
 # ============================================================
-# HOME
+# CURRENT USER ROLE
+# ============================================================
+
+user_role = str(
+    st.session_state.get(
+        "user_role",
+        "",
+    )
+    or ""
+).strip().lower()
+
+
+logged_in = bool(
+    st.session_state.get(
+        "logged_in",
+        False,
+    )
+)
+
+
+# ============================================================
+# STUDENT SIDEBAR
+# ============================================================
+#
+# IMPORTANT:
+# The sidebar is rendered ONLY here.
+#
+# resume.py
+# jobs.py
+# salary_prediction.py
+# assistant.py
+# student_feature.py
+#
+# DO NOT create another sidebar inside those files.
+#
+# ============================================================
+
+student_pages = {
+    "student",
+    "resume",
+    "assistant",
+    "jobs",
+    "salary_prediction",
+    "student_feature",
+    "job_details",
+    "job_applications",
+}
+
+
+should_show_student_sidebar = (
+    logged_in
+    and user_role == "student"
+    and page in student_pages
+)
+
+
+if should_show_student_sidebar:
+
+    show_student_sidebar()
+
+
+# ============================================================
+# PAGE ROUTING
 # ============================================================
 
 if page == "home":
@@ -171,9 +162,9 @@ if page == "home":
     home_page()
 
 
-# ============================================================
+# ------------------------------------------------------------
 # AUTHENTICATION
-# ============================================================
+# ------------------------------------------------------------
 
 elif page == "student_auth":
 
@@ -185,28 +176,9 @@ elif page == "company_auth":
     auth_page("company")
 
 
-# ============================================================
-# COMPANY / APPLICATION PAGES
-# ============================================================
-
-elif page == "job_applications":
-
-    job_applications()
-
-
-elif page == "job_management":
-
-    job_management()
-
-
-elif page == "job_details":
-
-    job_details()
-
-
-# ============================================================
-# STUDENT
-# ============================================================
+# ------------------------------------------------------------
+# STUDENT PAGES
+# ------------------------------------------------------------
 
 elif page == "student":
 
@@ -228,14 +200,29 @@ elif page == "jobs":
     jobs_page()
 
 
+elif page == "salary_prediction":
+
+    salary_prediction_page()
+
+
 elif page == "student_feature":
 
     student_feature_page()
 
 
-# ============================================================
-# COMPANY
-# ============================================================
+elif page == "job_details":
+
+    job_details()
+
+
+elif page == "job_applications":
+
+    job_applications()
+
+
+# ------------------------------------------------------------
+# COMPANY PAGES
+# ------------------------------------------------------------
 
 elif page == "company_selector":
 
@@ -257,10 +244,17 @@ elif page == "create_job":
     create_job()
 
 
+elif page == "job_management":
+
+    job_management()
+
+
 # ============================================================
-# SAFETY FALLBACK
+# UNKNOWN PAGE
 # ============================================================
 
 else:
 
     st.session_state["page"] = "home"
+
+    st.rerun()

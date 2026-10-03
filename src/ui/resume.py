@@ -510,77 +510,6 @@ def style_resume_workspace():
 
 
 # ==================================================
-# SIDEBAR NAVIGATION
-# ==================================================
-
-def show_student_sidebar():
-
-    st.sidebar.title(
-        "🎓 CareerIQ"
-    )
-
-    st.sidebar.caption(
-        "Student Career Portal"
-    )
-
-    st.sidebar.divider()
-
-    navigation_options = [
-        "📄 Resume Overview",
-        "🎯 Job Matching",
-        "🧠 Career Insights",
-        "📊 Skill Gap Analysis",
-        "🤖 AI Career Assistant",
-        "🔎 Job Discovery",
-        "📈 Career Dashboard",
-        "🗺️ Career Roadmap"
-    ]
-
-    current_feature = st.session_state.get(
-        "student_feature",
-        "📄 Resume Overview"
-    )
-
-    if current_feature not in navigation_options:
-        current_feature = "📄 Resume Overview"
-
-    selected_feature = st.sidebar.radio(
-        "Navigation",
-        navigation_options,
-        index=navigation_options.index(current_feature)
-    )
-
-    st.session_state["student_feature"] = selected_feature
-
-    st.sidebar.divider()
-
-    if st.sidebar.button(
-        "📤 Upload New Resume",
-        use_container_width=True
-    ):
-        # Use a dedicated upload route instead of relying only on
-        # a boolean flag. This prevents the database loader from
-        # restoring the old profile on the next Streamlit rerun.
-        st.session_state["student_feature"] = "📤 Upload New Resume"
-        st.session_state["resume_upload_mode"] = True
-        st.session_state["resume_upload_generation"] = (
-            st.session_state.get("resume_upload_generation", 0) + 1
-        )
-        clear_resume_data()
-        st.session_state["student_feature"] = "📤 Upload New Resume"
-        st.session_state["resume_upload_mode"] = True
-        st.rerun()
-
-    if st.sidebar.button(
-        "🏠 Back to Home",
-        use_container_width=True
-    ):
-        st.session_state["page"] = "home"
-        st.rerun()
-
-
-
-# ==================================================
 # RESUME UPLOAD AND ANALYSIS
 # ==================================================
 
@@ -3054,12 +2983,6 @@ def resume_page():
     # ==============================================
 
     style_resume_workspace()
-
-    # ==============================================
-    # SHOW SIDEBAR
-    # ==============================================
-
-    show_student_sidebar()
 
     # ==============================================
     # EXPLICIT NEW-RESUME UPLOAD MODE

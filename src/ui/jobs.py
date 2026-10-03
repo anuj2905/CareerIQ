@@ -1,7 +1,6 @@
-
+import html
 import re
 from typing import Any, Dict, List
-import html
 
 import streamlit as st
 
@@ -9,7 +8,9 @@ from src.database.repositories import (
     get_all_active_jobs,
     get_company,
     create_job_application,
+    get_job_applications,
 )
+
 from src.database.models import JobApplication
 
 from src.job_discovery.job_fetcher import (
@@ -23,179 +24,133 @@ from src.job_discovery.job_fetcher import (
 # ============================================================
 
 def _inject_job_discovery_style():
-    st.html("""
-    <style>
-    :root {
-        --cq-bg:#f7f6ef; --cq-ink:#073b5c; --cq-muted:#627586;
-        --cq-border:rgba(7,59,92,.13); --cq-cyan:#11a9b5;
-        --cq-purple:#8b5cf6; --cq-coral:#ff5a36;
-    }
+    st.markdown(
+        """
+        <style>
+        .job-hero {
+            padding: 28px 30px;
+            border-radius: 18px;
+            background:
+                linear-gradient(
+                    135deg,
+                    #18243a 0%,
+                    #111827 55%,
+                    #0f172a 100%
+                );
+            border: 1px solid #26344d;
+            margin-bottom: 22px;
+        }
 
-    .stApp {
-        background:
-            radial-gradient(circle at 10% 15%, rgba(17,169,181,.10), transparent 24%),
-            radial-gradient(circle at 90% 20%, rgba(139,92,246,.08), transparent 25%),
-            linear-gradient(180deg,#faf9f2 0%,#f7f6ef 100%);
-        color:var(--cq-ink);
-    }
+        .job-hero-title {
+            font-size: 38px;
+            font-weight: 800;
+            margin: 0;
+            color: #ffffff;
+        }
 
-    [data-testid="stHeader"] { background:rgba(250,249,242,.78); }
-    .block-container {
-        max-width:1420px;
-        padding-top:2.1rem;
-        padding-bottom:4rem;
-        background-image:radial-gradient(rgba(7,59,92,.13) .7px,transparent .7px);
-        background-size:26px 26px;
-    }
+        .job-hero-subtitle {
+            margin-top: 8px;
+            color: #aeb9cc;
+            font-size: 16px;
+        }
 
-    section[data-testid="stSidebar"] {
-        background:linear-gradient(180deg,#eeebda 0%,#e8e6d8 100%);
-        border-right:1px solid rgba(7,59,92,.12);
-    }
-    section[data-testid="stSidebar"] .stRadio label {
-        color:#35556c; font-weight:650;
-    }
-    section[data-testid="stSidebar"] .stButton button {
-        border-radius:12px;
-        border:1px solid rgba(7,59,92,.14);
-        background:rgba(255,255,255,.58);
-        color:#0a4566; font-weight:700;
-    }
+        .source-card {
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: #132b45;
+            border: 1px solid #214363;
+            color: #d9eaff;
+            margin-bottom: 22px;
+        }
 
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="select"] > div {
-        background:rgba(255,255,255,.96) !important;
-        border-color:rgba(7,59,92,.15) !important;
-        border-radius:12px !important;
-        color:#073b5c !important;
-    }
-    div[data-baseweb="input"] input,
-    div[data-baseweb="select"] input,
-    div[data-baseweb="select"] [role="combobox"],
-    div[data-baseweb="select"] [data-baseweb="select-value"],
-    div[data-baseweb="select"] span {
-        color:#073b5c !important;
-        -webkit-text-fill-color:#073b5c !important;
-    }
-    div[data-baseweb="select"] svg {
-        fill:#073b5c !important;
-    }
-    [data-baseweb="popover"],
-    [data-baseweb="menu"] {
-        background:#ffffff !important;
-        color:#073b5c !important;
-    }
-    [data-baseweb="menu"] [role="option"] {
-        color:#073b5c !important;
-        background:#ffffff !important;
-    }
-    [data-baseweb="menu"] [role="option"]:hover {
-        background:#eef8fa !important;
-        color:#073b5c !important;
-    }
-    label { color:#36546a !important; font-weight:700 !important; }
-    .stButton > button { border-radius:12px; font-weight:750; }
+        .search-card {
+            padding: 22px;
+            border-radius: 16px;
+            background: #171a24;
+            border: 1px solid #292d3a;
+            margin-bottom: 22px;
+        }
 
-    .cq-hero {
-        padding:34px 38px 36px;
-        border:1px solid var(--cq-border);
-        border-radius:24px;
-        background:
-            radial-gradient(circle at 88% 12%,rgba(17,169,181,.16),transparent 24%),
-            radial-gradient(circle at 72% 100%,rgba(139,92,246,.10),transparent 28%),
-            rgba(255,255,255,.72);
-        box-shadow:0 18px 55px rgba(7,59,92,.08);
-        margin-bottom:18px;
-    }
-    .cq-kicker {
-        color:var(--cq-coral); font-size:12px; font-weight:850;
-        letter-spacing:1.2px; text-transform:uppercase; margin-bottom:10px;
-    }
-    .cq-title {
-        color:var(--cq-ink); font-size:clamp(38px,5vw,62px);
-        line-height:1.02; font-weight:850; letter-spacing:-1.8px; margin:0;
-    }
-    .cq-gradient-line {
-        height:3px; width:100%; margin:18px 0;
-        border-radius:999px;
-        background:linear-gradient(90deg,#11a9b5,#8b5cf6,#ff5a36);
-    }
-    .cq-subtitle {
-        max-width:850px; color:#536a7c; font-size:15px; line-height:1.75;
-    }
-    .cq-source {
-        padding:14px 18px; border-radius:14px;
-        background:rgba(255,255,255,.75);
-        border:1px solid var(--cq-border); color:#506779;
-        line-height:1.65; margin-bottom:22px;
-    }
-    .cq-search {
-        padding:22px 24px 8px; border-radius:20px;
-        background:rgba(255,255,255,.8);
-        border:1px solid var(--cq-border);
-        box-shadow:0 10px 35px rgba(7,59,92,.055);
-        margin-bottom:22px;
-    }
-    .cq-section {
-        color:var(--cq-ink); font-size:24px; font-weight:820;
-        letter-spacing:-.4px; margin:18px 0 12px;
-    }
+        .section-title {
+            font-size: 25px;
+            font-weight: 750;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
 
-    .cq-job {
-        padding:24px 26px 20px; margin-bottom:0;
-        border-radius:20px; background:rgba(255,255,255,.9);
-        border:1px solid var(--cq-border);
-        box-shadow:0 10px 30px rgba(7,59,92,.055);
-    }
-    .cq-job.internal {
-        border-color:rgba(17,169,181,.28);
-        background:linear-gradient(135deg,rgba(236,253,250,.84),rgba(255,255,255,.94) 55%);
-    }
-    .cq-badge {
-        display:inline-block; padding:5px 9px; border-radius:999px;
-        font-size:10px; font-weight:850; letter-spacing:.45px;
-        color:#12657b; background:rgba(17,169,181,.10);
-        border:1px solid rgba(17,169,181,.20); margin-bottom:9px;
-    }
-    .cq-job-title {
-        color:var(--cq-ink); font-size:22px; line-height:1.2;
-        font-weight:820; margin-bottom:6px;
-    }
-    .cq-company { color:#49657a; font-size:14px; font-weight:650; margin-bottom:12px; }
-    .cq-meta { color:#687b8b; font-size:13px; line-height:1.7; margin-bottom:12px; }
-    .cq-description { color:#607485; font-size:13px; line-height:1.7; margin-bottom:10px; }
+        .job-card {
+            padding: 22px;
+            border-radius: 16px;
+            background: #171a24;
+            border: 1px solid #2b3040;
+            margin-bottom: 16px;
+        }
 
-    .cq-pill {
-        display:inline-block; padding:5px 10px; margin:3px 4px 3px 0;
-        border-radius:999px; background:#f0f7f8; color:#225d73;
-        border:1px solid rgba(17,169,181,.16); font-size:11px; font-weight:650;
-    }
-    .cq-match {
-        padding:15px 10px; border-radius:16px; text-align:center;
-        background:linear-gradient(145deg,rgba(17,169,181,.10),rgba(139,92,246,.08));
-        border:1px solid rgba(17,169,181,.18);
-    }
-    .cq-match-number { font-size:29px; line-height:1; font-weight:880; color:#087e91; }
-    .cq-match-label {
-        margin-top:5px; font-size:10px; color:#607a89;
-        font-weight:750; text-transform:uppercase; letter-spacing:.55px;
-    }
-    .cq-empty {
-        padding:42px 28px; border-radius:20px; text-align:center;
-        background:rgba(255,255,255,.72);
-        border:1px dashed rgba(7,59,92,.20);
-    }
-    .cq-cq-empty-icon { font-size:38px; margin-bottom:8px; }
-    .cq-cq-empty-title { color:var(--cq-ink); font-size:20px; font-weight:800; }
-    .cq-cq-empty-text { color:#687b8b; font-size:13px; line-height:1.65; margin-top:8px; }
-    [data-testid="stMetric"] {
-        background:rgba(255,255,255,.75);
-        border:1px solid rgba(7,59,92,.10);
-        border-radius:14px; padding:12px 14px;
-    }
-    [data-testid="stMetricValue"] { color:var(--cq-ink) !important; }
-    </style>
-    """)
+        .job-card:hover {
+            border-color: #ff4f57;
+        }
+
+        .job-title {
+            font-size: 21px;
+            font-weight: 750;
+            color: #ffffff;
+            margin-bottom: 7px;
+        }
+
+        .job-company {
+            color: #b8c2d4;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .job-meta {
+            color: #c6cfdd;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .skill-pill {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 3px 4px 3px 0;
+            border-radius: 999px;
+            background: #252a36;
+            color: #dce4f1;
+            border: 1px solid #363c4b;
+            font-size: 12px;
+        }
+
+        .match-box {
+            padding: 13px 16px;
+            border-radius: 12px;
+            background: #12281e;
+            border: 1px solid #235638;
+            text-align: center;
+        }
+
+        .match-number {
+            font-size: 25px;
+            font-weight: 800;
+            color: #62e69a;
+        }
+
+        .match-label {
+            font-size: 12px;
+            color: #a9c3b3;
+        }
+
+        .empty-box {
+            padding: 28px;
+            border-radius: 15px;
+            background: #162b43;
+            border: 1px solid #214363;
+            color: #d8eaff;
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -213,6 +168,10 @@ def _safe_text(value: Any) -> str:
 
 
 def _get_student_id() -> int:
+    """
+    CareerIQ currently uses student ID 1 for the local
+    single-student database setup.
+    """
     value = st.session_state.get("student_id")
 
     try:
@@ -227,201 +186,16 @@ def _get_resume_skills() -> List[str]:
     if profile is None:
         profile = st.session_state.get("profile")
 
-    if profile is None:
-        return []
+    if profile is not None:
+        skills = getattr(profile, "skills", []) or []
 
-    skills = getattr(profile, "skills", []) or []
+        return [
+            str(skill).strip()
+            for skill in skills
+            if str(skill).strip()
+        ]
 
-    return [
-        str(skill).strip()
-        for skill in skills
-        if str(skill).strip()
-    ]
-
-
-# ============================================================
-# ROLE MATCHING
-# ============================================================
-
-ROLE_ALIASES = {
-    "ml": {
-        "ml",
-        "machine learning",
-        "machine learning engineer",
-        "ml engineer",
-    },
-    "ai": {
-        "ai",
-        "artificial intelligence",
-        "ai engineer",
-        "artificial intelligence engineer",
-    },
-    "data scientist": {
-        "data scientist",
-        "data science",
-        "data scientist intern",
-    },
-    "data analyst": {
-        "data analyst",
-        "data analytics",
-        "data analysis",
-    },
-    "backend": {
-        "backend",
-        "backend developer",
-        "backend engineer",
-        "software engineer backend",
-    },
-    "frontend": {
-        "frontend",
-        "frontend developer",
-        "frontend engineer",
-    },
-    "full stack": {
-        "full stack",
-        "fullstack",
-        "full stack developer",
-        "full stack engineer",
-    },
-    "python": {
-        "python",
-        "python developer",
-        "python engineer",
-    },
-}
-
-
-def _role_tokens(value: str) -> set:
-    normalized = _normalize(value)
-
-    if not normalized:
-        return set()
-
-    tokens = set(normalized.split())
-
-    for canonical, aliases in ROLE_ALIASES.items():
-
-        if normalized == canonical:
-            tokens.update(
-                " ".join(alias.split())
-                for alias in aliases
-            )
-
-        if normalized in aliases:
-            tokens.update(
-                " ".join(alias.split())
-                for alias in aliases
-            )
-
-    return tokens
-
-
-def _role_matches(
-    job: Dict[str, Any],
-    target_role: str,
-) -> bool:
-
-    target_role = _normalize(target_role)
-
-    if not target_role:
-        return True
-
-    searchable_text = _normalize(
-        " ".join(
-            [
-                str(job.get("title", "")),
-                str(job.get("position", "")),
-                str(job.get("description", "")),
-                str(job.get("company", "")),
-                " ".join(
-                    str(skill)
-                    for skill in job.get("skills", [])
-                ),
-            ]
-        )
-    )
-
-    # Exact phrase match.
-    if target_role in searchable_text:
-        return True
-
-    # Alias-aware matching.
-    for alias_group in ROLE_ALIASES.values():
-
-        if target_role in alias_group:
-
-            if any(
-                alias in searchable_text
-                for alias in alias_group
-            ):
-                return True
-
-    # Token overlap.
-    target_tokens = set(target_role.split())
-
-    if not target_tokens:
-        return True
-
-    job_tokens = set(searchable_text.split())
-
-    overlap = target_tokens.intersection(job_tokens)
-
-    return len(overlap) >= max(
-        1,
-        len(target_tokens) // 2
-    )
-
-
-# ============================================================
-# FILTERING
-# ============================================================
-
-def _work_mode_matches(
-    job: Dict[str, Any],
-    work_mode: str,
-) -> bool:
-
-    work_mode = _normalize(work_mode)
-
-    if not work_mode or work_mode == "all":
-        return True
-
-    searchable_text = _normalize(
-        " ".join(
-            [
-                str(job.get("location", "")),
-                str(job.get("description", "")),
-                str(job.get("employment_type", "")),
-                str(job.get("work_mode", "")),
-            ]
-        )
-    )
-
-    if work_mode == "remote":
-        return "remote" in searchable_text
-
-    if work_mode == "hybrid":
-        return "hybrid" in searchable_text
-
-    if work_mode == "on-site":
-        onsite_terms = {
-            "onsite",
-            "on-site",
-            "office",
-            "pune",
-            "mumbai",
-            "bangalore",
-            "bengaluru",
-            "delhi",
-            "hyderabad",
-        }
-
-        return any(
-            term in searchable_text
-            for term in onsite_terms
-        )
-
-    return True
+    return []
 
 
 def _job_matches_filters(
@@ -431,59 +205,77 @@ def _job_matches_filters(
     work_mode: str,
 ) -> bool:
 
-    if not _role_matches(
-        job,
-        target_role,
-    ):
-        return False
+    searchable_text = _normalize(
+        " ".join(
+            [
+                str(job.get("title", "")),
+                str(job.get("description", "")),
+                str(job.get("company", "")),
+                str(job.get("location", "")),
+                " ".join(
+                    str(skill)
+                    for skill in job.get("skills", [])
+                ),
+            ]
+        )
+    )
 
+    target_role = _normalize(target_role)
     location = _normalize(location)
+    work_mode = _normalize(work_mode)
 
-    if location:
+    if target_role:
+        role_terms = target_role.split()
 
-        job_location = _normalize(
-            job.get("location", "")
-        )
-
-        company_location = _normalize(
-            job.get("company_location", "")
-        )
-
-        combined_location = (
-            f"{job_location} {company_location}"
-        )
-
-        if location not in combined_location:
+        if not all(
+            term in searchable_text
+            for term in role_terms
+        ):
             return False
 
-    if not _work_mode_matches(
-        job,
-        work_mode,
-    ):
-        return False
+    if location:
+        if location not in searchable_text:
+            return False
+
+    if work_mode == "remote":
+        if "remote" not in searchable_text:
+            return False
+
+    elif work_mode == "hybrid":
+        if "hybrid" not in searchable_text:
+            return False
+
+    elif work_mode == "onsite":
+        onsite_terms = [
+            "onsite",
+            "on-site",
+            "office",
+            "pune",
+            "mumbai",
+            "bangalore",
+            "bengaluru",
+            "delhi",
+            "hyderabad",
+        ]
+
+        if not any(
+            term in searchable_text
+            for term in onsite_terms
+        ):
+            return False
 
     return True
 
 
-# ============================================================
-# INTERNAL CAREERIQ JOBS
-# ============================================================
-
 def _convert_internal_job(
     job,
-    company,
+    company
 ) -> Dict[str, Any]:
 
     company_name = (
         company.company_name
         if company
         else "CareerIQ Company"
-    )
-
-    company_location = (
-        company.location
-        if company
-        else ""
     )
 
     return {
@@ -495,7 +287,6 @@ def _convert_internal_job(
         "title": job.title,
         "company": company_name,
         "company_id": job.company_id,
-        "company_location": company_location,
         "location": job.location,
         "description": job.description,
         "employment_type": job.employment_type,
@@ -506,12 +297,12 @@ def _convert_internal_job(
         "status": job.status,
         "skills": list(job.skills or []),
         "tags": list(job.skills or []),
-        "job_skills": list(job.skills or []),
         "url": "",
         "date": "",
         "match_score": 0.0,
         "matched_skills": [],
         "missing_skills": [],
+        "job_skills": list(job.skills or []),
     }
 
 
@@ -532,6 +323,10 @@ def _calculate_internal_match(
     )
 
 
+# ============================================================
+# LOAD INTERNAL CAREERIQ JOBS
+# ============================================================
+
 def _load_internal_jobs(
     target_role: str,
     location: str,
@@ -540,14 +335,10 @@ def _load_internal_jobs(
 ) -> List[Dict[str, Any]]:
 
     jobs = get_all_active_jobs()
-
     results = []
 
     for job in jobs:
-
-        company = get_company(
-            job.company_id
-        )
+        company = get_company(job.company_id)
 
         item = _convert_internal_job(
             job,
@@ -568,13 +359,11 @@ def _load_internal_jobs(
         )
 
         item.update(match)
-
         results.append(item)
 
     results.sort(
         key=lambda item: float(
-            item.get("match_score", 0.0)
-            or 0.0
+            item.get("match_score", 0.0) or 0.0
         ),
         reverse=True,
     )
@@ -583,7 +372,7 @@ def _load_internal_jobs(
 
 
 # ============================================================
-# EXTERNAL JOBS
+# LOAD EXTERNAL JOBS
 # ============================================================
 
 def _load_external_jobs(
@@ -609,19 +398,78 @@ def _load_external_jobs(
     )
 
 
-# ============================================================
-# APPLICATION HELPERS
-# ============================================================
+def _format_salary(
+    salary_min: Any,
+    salary_max: Any,
+) -> str:
 
-def _get_student_applications():
+    if salary_min is None and salary_max is None:
+        return "Salary not specified"
+
+    if salary_min is not None and salary_max is not None:
+        return (
+            f"₹{float(salary_min):,.0f}"
+            f" – "
+            f"₹{float(salary_max):,.0f}"
+        )
+
+    if salary_min is not None:
+        return f"From ₹{float(salary_min):,.0f}"
+
+    return f"Up to ₹{float(salary_max):,.0f}"
+
+
+def _render_skill_pills(skills: List[str]):
+    if not skills:
+        st.caption("No required skills listed.")
+
+        return
+
+    pills = "".join(
+        f'<span class="skill-pill">'
+        f'{_safe_text(skill)}'
+        f"</span>"
+        for skill in skills
+    )
+
+    st.markdown(
+        pills,
+        unsafe_allow_html=True,
+    )
+
+
+def _already_applied(job_id: int) -> bool:
     student_id = _get_student_id()
+
+    try:
+        applications = get_job_applications_for_student(
+            student_id
+        )
+
+        return any(
+            application.job_id == job_id
+            for application in applications
+        )
+
+    except Exception:
+        return False
+
+
+def get_job_applications_for_student(
+    student_id: int
+):
+    """
+    Retrieve the student's applications.
+
+    This uses the existing repository database directly so
+    Job Discovery does not need a second application store.
+    """
 
     from src.database.database import get_connection
 
     connection = get_connection()
 
     try:
-
         cursor = connection.cursor()
 
         cursor.execute(
@@ -658,115 +506,6 @@ def _get_student_applications():
         connection.close()
 
 
-def _already_applied(job_id: int) -> bool:
-
-    try:
-
-        applications = _get_student_applications()
-
-        return any(
-            application.job_id == job_id
-            for application in applications
-        )
-
-    except Exception:
-
-        return False
-
-
-# ============================================================
-# SKILLS
-# ============================================================
-
-def _render_skill_pills(
-    skills: List[str],
-):
-
-    if not skills:
-
-        st.caption(
-            "No required skills listed."
-        )
-
-        return
-
-    pills = "".join(
-        f"""
-        <span class="skill-pill">
-            {_safe_text(skill)}
-        </span>
-        """
-        for skill in skills
-    )
-
-    st.html(pills)
-
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-
-def _show_sidebar():
-    st.html("""
-    <style>
-    section[data-testid="stSidebar"] {
-        background:linear-gradient(180deg,#eeebda 0%,#e8e6d8 100%);
-        border-right:1px solid rgba(7,59,92,.12);
-    }
-    </style>
-    """)
-
-    st.sidebar.html("""
-    <div style="padding:8px 4px 14px;color:#073b5c;">
-        <div style="font-size:26px;font-weight:850;letter-spacing:-.8px;">🧠 CareerIQ</div>
-        <div style="margin-top:4px;font-size:12px;color:#637789;font-weight:650;">
-            AI Career Intelligence Platform
-        </div>
-    </div>
-    """)
-
-    st.sidebar.divider()
-
-    navigation_options = [
-        "📄 Resume Overview",
-        "🎯 Job Matching",
-        "🧠 Career Insights",
-        "📊 Skill Gap Analysis",
-        "🤖 AI Career Assistant",
-        "🔎 Job Discovery",
-        "📈 Career Dashboard",
-        "🗺️ Career Roadmap",
-    ]
-
-    current = st.session_state.get("student_feature", "🔎 Job Discovery")
-    if current not in navigation_options:
-        current = "🔎 Job Discovery"
-
-    selected = st.sidebar.radio(
-        "Workspace",
-        navigation_options,
-        index=navigation_options.index(current),
-    )
-
-    st.session_state["student_feature"] = selected
-
-    if selected != "🔎 Job Discovery":
-        st.session_state["page"] = "student_feature"
-        st.rerun()
-
-    st.sidebar.divider()
-    st.sidebar.caption("QUICK ACTIONS")
-
-    if st.sidebar.button("📄 Upload New Resume", use_container_width=True):
-        st.session_state["student_feature"] = "📄 Resume Overview"
-        st.session_state["page"] = "student_feature"
-        st.rerun()
-
-    if st.sidebar.button("🏠 Back to Home", use_container_width=True):
-        st.session_state["page"] = "home"
-        st.rerun()
-
-
 # ============================================================
 # JOB CARD
 # ============================================================
@@ -775,111 +514,249 @@ def _render_job_card(
     job: Dict[str, Any],
     card_index: int,
 ):
-    title = job.get("position", "Untitled Job")
-    company = job.get("company", "Unknown Company")
-    location = job.get("location", "Not specified")
-    employment_type = job.get("employment_type", "")
 
-    description = str(job.get("description", "") or "")
-    description = re.sub(r"<[^>]+>", " ", description)
-    description = " ".join(description.split())
+    source = job.get(
+        "source",
+        "External",
+    )
+
+    title = job.get(
+        "position",
+        "Untitled Job",
+    )
+
+    company = job.get(
+        "company",
+        "Unknown Company",
+    )
+
+    location = job.get(
+        "location",
+        "Not specified",
+    )
+
+    employment_type = job.get(
+        "employment_type",
+        "",
+    )
+
+    description = str(
+        job.get(
+            "description",
+            "",
+        )
+        or ""
+    )
+
+    description = re.sub(
+        r"<[^>]+>",
+        " ",
+        description,
+    )
+
+    description = " ".join(
+        description.split()
+    )
+
     if len(description) > 320:
-        description = description[:320] + "..."
+        description = (
+            description[:320]
+            + "..."
+        )
 
-    score = float(job.get("match_score", 0.0) or 0.0)
-    matched_skills = job.get("matched_skills", []) or []
-    missing_skills = job.get("missing_skills", []) or []
-    skills = job.get("job_skills", job.get("tags", [])) or []
+    score = float(
+        job.get(
+            "match_score",
+            0.0,
+        )
+        or 0.0
+    )
 
-    salary_min = job.get("salary_min")
-    salary_max = job.get("salary_max")
-    if salary_min is None and salary_max is None:
-        salary = "Salary not specified"
-    elif salary_min is not None and salary_max is not None:
-        salary = f"₹{float(salary_min):,.0f} – ₹{float(salary_max):,.0f}"
-    elif salary_min is not None:
-        salary = f"From ₹{float(salary_min):,.0f}"
-    else:
-        salary = f"Up to ₹{float(salary_max):,.0f}"
+    matched_skills = job.get(
+        "matched_skills",
+        [],
+    ) or []
 
-    card_class = "cq-job internal" if job.get("internal") else "cq-job"
+    missing_skills = job.get(
+        "missing_skills",
+        [],
+    ) or []
 
-    st.html(f"""
-    <div class="{card_class}">
-        <div class="cq-badge">
-            {"🏢 CAREERIQ COMPANY JOB" if job.get("internal") else "🌐 EXTERNAL JOB"}
-        </div>
-        <div class="cq-job-title">💼 {_safe_text(title)}</div>
-        <div class="cq-company">🏢 {_safe_text(company)}</div>
-        <div class="cq-meta">
-            📍 {_safe_text(location)}
-            &nbsp; • &nbsp; 💼 {_safe_text(employment_type or "Not specified")}
-            &nbsp; • &nbsp; 💰 {_safe_text(salary)}
-        </div>
-        {
-            f'<div class="cq-description">{_safe_text(description)}</div>'
-            if description else ""
-        }
-    </div>
-    """)
+    skills = job.get(
+        "job_skills",
+        job.get("tags", []),
+    ) or []
 
-    left, right = st.columns([5, 1.25], gap="large")
+    salary = _format_salary(
+        job.get("salary_min"),
+        job.get("salary_max"),
+    )
+
+    st.markdown(
+        '<div class="job-card">',
+        unsafe_allow_html=True,
+    )
+
+    left, right = st.columns(
+        [5, 1.35]
+    )
 
     with left:
-        st.caption("REQUIRED SKILLS")
+
+        st.markdown(
+            f'<div class="job-title">'
+            f'💼 {_safe_text(title)}'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f'<div class="job-company">'
+            f'🏢 {_safe_text(company)}'
+            f" &nbsp; • &nbsp; "
+            f'📌 {_safe_text(source)}'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        meta = (
+            f"📍 {location}"
+        )
+
+        if employment_type:
+            meta += (
+                f" &nbsp; • &nbsp; "
+                f"💼 {employment_type}"
+            )
+
+        meta += (
+            f" &nbsp; • &nbsp; 💰 {salary}"
+        )
+
+        st.markdown(
+            f'<div class="job-meta">'
+            f"{_safe_text(meta)}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        if description:
+            st.write(description)
+
+        st.caption("Required Skills")
         _render_skill_pills(skills)
 
         if matched_skills:
-            st.success("Matched: " + ", ".join(matched_skills))
+            st.success(
+                "Matched: "
+                + ", ".join(matched_skills)
+            )
+
         if missing_skills:
-            st.warning("Missing: " + ", ".join(missing_skills))
+            st.warning(
+                "Missing: "
+                + ", ".join(missing_skills)
+            )
 
     with right:
-        st.html(f"""
-        <div class="cq-match">
-            <div class="cq-match-number">{score * 100:.0f}%</div>
-            <div class="cq-match-label">AI Skill Match</div>
-        </div>
-        """)
+
+        st.markdown(
+            f"""
+            <div class="match-box">
+                <div class="match-number">
+                    {score * 100:.0f}%
+                </div>
+                <div class="match-label">
+                    Skill Match
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.write("")
 
         if job.get("internal"):
-            job_id = int(job["job_id"])
 
-            if _already_applied(job_id):
+            if _already_applied(
+                int(job["job_id"])
+            ):
+
                 st.button(
                     "✅ Applied",
-                    key=f"applied_{job_id}",
+                    key=(
+                        f"applied_{job['job_id']}"
+                    ),
                     use_container_width=True,
                     disabled=True,
                 )
-            elif st.button(
-                "🚀 Apply Now",
-                key=f"apply_{job_id}",
-                type="primary",
-                use_container_width=True,
-            ):
-                application = JobApplication(
-                    job_id=job_id,
-                    student_id=_get_student_id(),
-                    match_score=score,
-                    application_status="applied",
-                )
-                try:
-                    create_job_application(application)
-                    st.success("Application submitted!")
-                    st.rerun()
-                except Exception as e:
-                    if "UNIQUE" in str(e).upper():
-                        st.warning("You already applied to this job.")
-                    else:
-                        st.error(f"Could not submit application: {e}")
-        else:
-            url = job.get("url", "")
-            if url:
-                st.link_button("🔗 View & Apply", url, use_container_width=True)
 
-    st.write("")
+            else:
+
+                if st.button(
+                    "🚀 Apply Now",
+                    key=(
+                        f"apply_{job['job_id']}"
+                    ),
+                    type="primary",
+                    use_container_width=True,
+                ):
+
+                    student_id = _get_student_id()
+
+                    application = JobApplication(
+                        job_id=int(
+                            job["job_id"]
+                        ),
+                        student_id=student_id,
+                        match_score=score,
+                        application_status="applied",
+                    )
+
+                    try:
+
+                        create_job_application(
+                            application
+                        )
+
+                        st.success(
+                            "Application submitted!"
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        if "UNIQUE" in str(e).upper():
+
+                            st.warning(
+                                "You already applied "
+                                "to this job."
+                            )
+
+                        else:
+
+                            st.error(
+                                "Could not submit "
+                                f"application: {e}"
+                            )
+
+        else:
+
+            url = job.get("url", "")
+
+            if url:
+
+                st.link_button(
+                    "🔗 View & Apply",
+                    url,
+                    use_container_width=True,
+                )
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -890,40 +767,32 @@ def jobs_page():
 
     _inject_job_discovery_style()
 
-    _show_sidebar()
-
-    st.html(
+    st.markdown(
         """
-        <div class="cq-hero">
-
-            <div class="cq-kicker">
-                CAREERIQ / OPPORTUNITIES
-            </div>
-
-            <div class="cq-hero-title">
+        <div class="job-hero">
+            <div class="job-hero-title">
                 🔎 Job Discovery
             </div>
-
-            <div class="cq-hero-subtitle">
-                Discover jobs posted by CareerIQ companies
-                and external remote opportunities. Compare
-                each opportunity with the skills in your resume.
+            <div class="job-hero-subtitle">
+                Discover CareerIQ company jobs and
+                current remote opportunities matched
+                with your resume.
             </div>
-
         </div>
-        """
+        """,
+        unsafe_allow_html=True,
     )
 
-    st.html(
+    st.markdown(
         """
-        <div class="cq-source">
-            🏢 <b>CareerIQ Jobs</b> are posted directly by
-            companies using the platform.
-            &nbsp;&nbsp;
-            🌐 <b>External Jobs</b> come from Remote OK and
-            link back to the original posting.
+        <div class="source-card">
+            🏢 <b>CareerIQ Jobs</b> come directly from
+            companies using the CareerIQ platform.
+            🌐 <b>External Jobs</b> are fetched from
+            Remote OK and link back to the original posting.
         </div>
-        """
+        """,
+        unsafe_allow_html=True,
     )
 
     resume_skills = _get_resume_skills()
@@ -935,24 +804,19 @@ def jobs_page():
             "to calculate skill matches."
         )
 
-    # ========================================================
-    # SEARCH PANEL
-    # ========================================================
-
-    st.html(
-        """
-        <div class="cq-search">
-            <div class="cq-section">
-                🔍 Search Opportunities
-            </div>
-        </div>
-        """
+    st.markdown(
+        '<div class="search-card">',
+        unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns(
-        2,
-        gap="large",
+    st.markdown(
+        '<div class="section-title">'
+        '🔍 Search Jobs'
+        '</div>',
+        unsafe_allow_html=True,
     )
+
+    col1, col2 = st.columns(2)
 
     with col1:
 
@@ -973,24 +837,22 @@ def jobs_page():
         location = st.text_input(
             "Location",
             placeholder=(
-                "Optional: Pune, Mumbai, India..."
+                "Optional: Pune, Mumbai, "
+                "India, Europe..."
             ),
         )
 
-    col3, col4 = st.columns(
-        2,
-        gap="large",
-    )
+    col3, col4 = st.columns(2)
 
     with col3:
 
         work_mode = st.selectbox(
             "Work Mode",
             [
-                "All",
                 "Remote",
                 "Hybrid",
                 "On-site",
+                "All",
             ],
         )
 
@@ -1003,8 +865,8 @@ def jobs_page():
         )
 
     st.caption(
-        "Your resume skills are used to calculate "
-        "the skill match percentage."
+        "Your resume skills are automatically used "
+        "to calculate the skill match percentage."
     )
 
     search_clicked = st.button(
@@ -1013,8 +875,13 @@ def jobs_page():
         use_container_width=True,
     )
 
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
     # ========================================================
-    # LOAD INTERNAL CAREERIQ JOBS
+    # INITIAL INTERNAL JOB PREVIEW
     # ========================================================
 
     try:
@@ -1040,7 +907,7 @@ def jobs_page():
         )
 
     # ========================================================
-    # SEARCH EXTERNAL JOBS
+    # SEARCH
     # ========================================================
 
     if search_clicked:
@@ -1055,14 +922,12 @@ def jobs_page():
 
             try:
 
-                external_jobs = (
-                    _load_external_jobs(
-                        target_role=target_role,
-                        location=location,
-                        work_mode=work_mode,
-                        resume_skills=resume_skills,
-                        limit=result_limit,
-                    )
+                external_jobs = _load_external_jobs(
+                    target_role=target_role,
+                    location=location,
+                    work_mode=work_mode,
+                    resume_skills=resume_skills,
+                    limit=result_limit,
                 )
 
             except Exception as e:
@@ -1070,11 +935,10 @@ def jobs_page():
                 external_jobs = []
 
                 st.warning(
-                    "Remote OK jobs could not be "
-                    f"loaded right now: {e}"
+                    "Remote OK jobs could not be loaded "
+                    f"right now: {e}"
                 )
 
-        # Reload internal jobs after search.
         internal_jobs = _load_internal_jobs(
             target_role=target_role,
             location=location,
@@ -1087,7 +951,6 @@ def jobs_page():
         )
 
         for job in external_jobs:
-
             job["source"] = "Remote OK"
             job["internal"] = False
 
@@ -1097,12 +960,9 @@ def jobs_page():
         )
 
         combined_jobs.sort(
-            key=lambda item: float(
-                item.get(
-                    "match_score",
-                    0.0,
-                )
-                or 0.0
+            key=lambda item: item.get(
+                "match_score",
+                0.0,
             ),
             reverse=True,
         )
@@ -1117,21 +977,18 @@ def jobs_page():
     # RESULTS
     # ========================================================
 
-    discovered_jobs = (
-        st.session_state.get(
-            "discovered_jobs",
-            [],
-        )
+    discovered_jobs = st.session_state.get(
+        "discovered_jobs",
+        [],
     )
 
     if discovered_jobs:
 
-        st.html(
-            """
-            <div class="cq-section">
-                🎯 Matching Opportunities
-            </div>
-            """
+        st.markdown(
+            '<div class="section-title">'
+            '🎯 Matching Opportunities'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
         careeriq_count = sum(
@@ -1165,33 +1022,6 @@ def jobs_page():
         for index, job in enumerate(
             discovered_jobs
         ):
-
-            _render_job_card(
-                job,
-                index,
-            )
-
-    elif internal_jobs:
-
-        st.html(
-            """
-            <div class="cq-section">
-                🏢 CareerIQ Opportunities
-            </div>
-            """
-        )
-
-        st.info(
-            "These active company jobs are currently "
-            "available on CareerIQ."
-        )
-
-        for index, job in enumerate(
-            internal_jobs[
-                :result_limit
-            ]
-        ):
-
             _render_job_card(
                 job,
                 index,
@@ -1199,31 +1029,46 @@ def jobs_page():
 
     else:
 
-        st.html(
-            """
-            <div class="cq-empty">
+        # Show active CareerIQ jobs even before
+        # an external search has been performed.
+        if internal_jobs:
 
-                <div class="cq-empty-icon">
-                    🔎
+            st.markdown(
+                '<div class="section-title">'
+                '🏢 CareerIQ Opportunities'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.info(
+                "These active jobs are currently "
+                "available on CareerIQ."
+            )
+
+            for index, job in enumerate(
+                internal_jobs[:result_limit]
+            ):
+                _render_job_card(
+                    job,
+                    index,
+                )
+
+        else:
+
+            st.markdown(
+                """
+                <div class="empty-box">
+                    🔎 Enter a target role and click
+                    <b>Find Matching Jobs</b> to discover
+                    current opportunities.
                 </div>
-
-                <div class="cq-empty-title">
-                    No matching opportunities found
-                </div>
-
-                <div class="cq-empty-text">
-                    Try a broader target role, remove
-                    the location filter, or choose
-                    <b>All</b> work modes.
-                </div>
-
-            </div>
-            """
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 # ============================================================
-# COMPATIBILITY ALIASES
+# COMPATIBILITY ALIAS
 # ============================================================
 
 def job_discovery_page():

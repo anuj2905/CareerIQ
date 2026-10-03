@@ -2,118 +2,241 @@
 
 ### AI-Powered Career Intelligence & Job Matching Platform
 
-An AI-powered career intelligence and job-matching platform that analyzes resumes, predicts suitable career roles, matches candidates with job requirements, identifies skill gaps, and provides personalized career guidance.
+CareerIQ is an AI/ML-powered career intelligence and job-matching platform designed to help students, fresh graduates, job seekers, and recruiters make better use of resume and job-related information.
 
-🔗 Live Demo: [https://careeriq-anuj-patil.streamlit.app/](url)
+The system analyzes candidate resumes, extracts structured profile information, evaluates job compatibility, identifies skill gaps, predicts suitable career roles, provides salary predictions, and offers personalized career guidance through AI-powered features.
 
-📌 Overview
+---
 
-Job Intelligent System is an AI/ML-based web application designed to help students and job seekers understand their career potential and find suitable career opportunities.
+## 🌐 Live Demo
 
-The system analyzes a user's resume and extracts important information such as:
+[🚀 Try CareerIQ Live](https://careeriq-anuj-patil.streamlit.app/)
 
-👤 Name
-🎓 Education
-💻 Skills
-📂 Projects
-💼 Experience
-📜 Certifications
+---
 
-The extracted profile is then used across different modules for career analysis and job matching.
+## 📌 Overview
 
-🚀 Features
-📄 Resume Analysis
+Finding suitable career opportunities can be challenging for students and job seekers because they often need to manually analyze their resumes, understand job requirements, identify missing skills, search for suitable opportunities, and estimate their career readiness.
 
-Upload your resume and automatically extract structured information including education, skills, projects, experience, and certifications.
+CareerIQ addresses these challenges by providing an integrated platform for resume analysis, job matching, career insights, skill-gap analysis, salary prediction, job discovery, and AI-powered career assistance.
 
-🎯 Job Matching
+The system processes information such as:
 
-Compare your profile with job requirements and calculate:
+- 👤 Name
+- 🎓 Education
+- 💻 Technical Skills
+- 📂 Projects
+- 💼 Experience
+- 📜 Certifications
 
-💻 Skill Match
-🎓 Education Match
-💼 Experience Match
-🏆 Overall Job Match
-🧠 Career Insights
+The extracted information is converted into a structured candidate profile and reused across multiple modules of the application.
 
-Analyze your profile and identify suitable career roles based on your skills and background.
+---
 
-📊 Skill Gap Analysis
+## 🎯 Objectives
 
-Select a target career role and identify:
+The main objectives of CareerIQ are:
 
-✅ Matched Skills
-❌ Missing Skills
-➕ Additional Skills
-📈 Skill Gap Score
-📚 Learning Recommendations
-🤖 AI Career Assistant
+- To automatically analyze candidate resumes.
+- To extract structured information from unstructured resume documents.
+- To identify career roles that match a candidate's profile.
+- To compare candidate profiles with job requirements.
+- To calculate skill, education, and experience matching scores.
+- To identify missing skills for a selected career role.
+- To provide personalized career recommendations.
+- To provide AI-powered career assistance.
+- To help users discover relevant job opportunities.
+- To provide salary prediction using machine learning.
+- To provide a centralized career dashboard.
+- To help users plan their career development.
 
-Ask career-related questions and receive AI-powered guidance related to:
+---
 
-Career paths
-Technical skills
-Projects
-Interviews
-Learning strategies
-Job preparation
-🔎 Job Discovery
+# 🚀 Features
 
-Discover relevant job opportunities based on your career profile and interests.
+## 📄 1. Resume Analysis
 
-📈 Career Dashboard
+Users can upload their resumes and automatically extract important information.
 
-View important career information and analysis results through an interactive dashboard.
+The system extracts:
 
-🗺️ Career Roadmap
+- Name
+- Education
+- Skills
+- Projects
+- Experience
+- Certifications
 
-Get structured guidance for developing skills and preparing for your selected career path.
+The extracted information is converted into a structured candidate profile that can be reused across other modules.
 
+The system supports PDF text extraction and can use OCR for scanned or image-based documents.
 
-                    ┌──────────────────────┐
-                    │       User           │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Streamlit UI       │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Resume Upload      │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-              ┌─────────────────────────────────┐
-              │       Resume Processing         │
-              │  PyMuPDF + Tesseract OCR        │
-              └───────────────┬─────────────────┘
-                              │
-                              ▼
-              ┌─────────────────────────────────┐
-              │     AI Profile Extraction       │
-              │        OpenAI / LLM              │
-              └───────────────┬─────────────────┘
-                              │
-                              ▼
-                   ┌──────────────────────┐
-                   │ Candidate Profile    │
-                   └──────────┬───────────┘
-                              │
-          ┌───────────────────┼────────────────────┐
-          ▼                   ▼                    ▼
- ┌────────────────┐  ┌─────────────────┐  ┌─────────────────┐
- │ Career Role    │  │  Job Matching   │  │  Skill Gap      │
- │ Prediction     │  │                 │  │  Analysis       │
- └────────────────┘  └─────────────────┘  └─────────────────┘
-          │                   │                    │
-          └───────────────────┼────────────────────┘
-                              ▼
-                    ┌──────────────────────┐
-                    │ Career Insights &    │
-                    │ Recommendations      │
-                    └──────────────────────┘
+---
+
+## 🎯 2. Job Matching
+
+The Job Matching module compares a candidate's profile with specific job requirements.
+
+The system evaluates:
+
+- 💻 Skill Match
+- 🎓 Education Match
+- 💼 Experience Match
+- 🏆 Overall Job Match
+
+The results are presented using visual indicators to make the matching information easier to understand.
+
+The matching process can consider both direct skill matching and semantic relevance between candidate experience and job requirements.
+
+---
+
+## 🧠 3. Career Insights
+
+Career Insights analyzes the candidate's profile and provides career-related information based on their skills, education, projects, experience, and certifications.
+
+The module can help users understand:
+
+- Suitable career roles
+- Existing strengths
+- Areas that require improvement
+- Relevant technical skills
+- Career development requirements
+
+---
+
+## 📊 4. Skill Gap Analysis
+
+The Skill Gap Analysis module compares the user's existing skills with the skills required for a selected career role.
+
+It provides:
+
+- ✅ Matched Skills
+- ❌ Missing Skills
+- ➕ Additional Skills
+- 📈 Skill Gap Score
+- 📚 Learning Recommendations
+
+This helps users understand which technical skills they should focus on developing for their target career.
+
+---
+
+## 🤖 5. AI Career Assistant
+
+CareerIQ includes an AI-powered career assistant that can help users with career-related questions.
+
+Users can ask about:
+
+- Career paths
+- Technical skills
+- Learning strategies
+- Projects
+- Interview preparation
+- Job preparation
+- Career development
+
+The assistant uses AI to generate contextual career guidance.
+
+---
+
+## 🔎 6. Job Discovery
+
+The Job Discovery module helps users find relevant job opportunities based on their career profile and requirements.
+
+The module is designed to reduce the manual effort involved in searching for suitable job opportunities.
+
+---
+
+## 📈 7. Career Dashboard
+
+The Career Dashboard provides a centralized view of important career-related information.
+
+Users can access information related to:
+
+- Candidate profile
+- Career insights
+- Job matching
+- Skill gaps
+- Career analysis
+- Other relevant career results
+
+---
+
+## 🗺️ 8. Career Roadmap
+
+The Career Roadmap feature provides structured guidance for users who want to work toward a specific career role.
+
+The roadmap can help users understand:
+
+- Skills to develop
+- Areas to improve
+- Projects to build
+- Career preparation requirements
+
+---
+
+## 💰 9. Salary Prediction
+
+CareerIQ includes a machine-learning-based salary prediction module.
+
+The system processes relevant job and market information to estimate salary values.
+
+This feature is intended to provide users with an approximate understanding of salary expectations associated with relevant job profiles.
+
+---
+
+# 🏢 Company Features
+
+CareerIQ also includes functionality designed for the company/recruiter side.
+
+## 🏢 Company Dashboard
+
+The Company Dashboard provides an interface for organizations to manage job-related information.
+
+## 💼 Job Management
+
+Companies can manage job postings and define relevant job requirements.
+
+This functionality provides the foundation for future candidate-job matching and recruitment intelligence.
+
+---
+
+# 🏗️ System Architecture
+
+```text
+                           ┌───────────────────────┐
+                           │       CareerIQ         │
+                           │  Career Intelligence  │
+                           └───────────┬───────────┘
+                                       │
+                    ┌──────────────────┴──────────────────┐
+                    │                                     │
+             ┌──────▼──────┐                       ┌──────▼──────┐
+             │   Student   │                       │   Company   │
+             │    Portal   │                       │    Portal   │
+             └──────┬──────┘                       └──────┬──────┘
+                    │                                     │
+       ┌────────────┼────────────┐              ┌──────────┴─────────┐
+       │            │            │              │                    │
+       ▼            ▼            ▼              ▼                    ▼
+   Resume       Job Matching   Career       Company             Manage
+   Analysis                    Insights     Dashboard              Jobs
+       │            │            │
+       └────────────┼────────────┘
+                    │
+                    ▼
+          ┌──────────────────────┐
+          │   AI / ML Engine     │
+          └──────────┬───────────┘
+                     │
+       ┌─────────────┼──────────────┐
+       │             │              │
+       ▼             ▼              ▼
+  Skill Gap      Salary         Career
+  Analysis      Prediction      Guidance
+       │
+       ▼
+  Learning & Career
+   Recommendations
 
 
 

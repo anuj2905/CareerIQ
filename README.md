@@ -204,8 +204,8 @@ This functionality provides the foundation for future candidate-job matching and
 
 ```text
                            ┌───────────────────────┐
-                           │       CareerIQ         │
-                           │  Career Intelligence  │
+                           │       CareerIQ        │
+                           │ Career Intelligence   │
                            └───────────┬───────────┘
                                        │
                     ┌──────────────────┴──────────────────┐
@@ -225,7 +225,7 @@ This functionality provides the foundation for future candidate-job matching and
                     │
                     ▼
           ┌──────────────────────┐
-          │   AI / ML Engine     │
+          │     AI / ML Engine   │
           └──────────┬───────────┘
                      │
        ┌─────────────┼──────────────┐
@@ -237,7 +237,6 @@ This functionality provides the foundation for future candidate-job matching and
        ▼
   Learning & Career
    Recommendations
-
 
 
 🛠️ Tech Stack
